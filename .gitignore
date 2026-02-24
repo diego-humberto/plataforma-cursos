@@ -1,0 +1,36 @@
+# Claude Code
+.claude/
+.mcp.json
+
+# OS
+Thumbs.db
+.DS_Store
+nul
+
+# IDE
+.vscode/
+.idea/
+
+# Imagens soltas na raiz (pessoais — / restringe ao diretorio raiz)
+/*.jpg
+/*.jpeg
+/*.png
+
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+instance/
+**/uploads/*
+!**/uploads/.gitkeep
+
+# Banco de dados (protecao extra)
+*.sqlite
+*.db
