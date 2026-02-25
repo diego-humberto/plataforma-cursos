@@ -387,6 +387,11 @@ def update_course(course_id):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+@app.route('/uploads/<path:subpath>')
+def uploaded_file_subpath(subpath):
+    upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    return send_from_directory(upload_dir, subpath)
+
 
 @app.route('/api/courses/<int:course_id>', methods=['DELETE'])
 def delete_course(course_id):
@@ -813,6 +818,181 @@ def export_course_notes_pdf(course_id):
     safe_name = secure_filename(course.name) or f"curso-{course_id}"
     return send_file(pdf_buf, mimetype='application/pdf', as_attachment=True,
                      download_name=f"notas-{safe_name}.pdf")
+
+
+# ── Upload de imagens para anotações ──
+
+@app.route('/api/upload-note-image', methods=['POST'])
+def upload_note_image():
+    """Recebe uma imagem e salva em uploads/note-images/."""
+    if 'image' not in request.files:
+        return jsonify({'error': 'Nenhuma imagem enviada.'}), 400
+
+    file = request.files['image']
+    if not file.filename:
+        return jsonify({'error': 'Nome do arquivo vazio.'}), 400
+
+    # Validar tipo
+    allowed = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed:
+        return jsonify({'error': 'Tipo de arquivo não permitido.'}), 400
+
+    # Garantir diretório
+    upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'note-images')
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Gerar nome único
+    import uuid
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(upload_dir, filename)
+    file.save(filepath)
+
+    # Retornar URL relativa que o frontend pode usar
+    url = f"/uploads/note-images/{filename}"
+    return jsonify({'url': url}), 201
+
+
+# ── Revisao diaria de anotacoes ──
+
+@app.route('/api/notes/by-date', methods=['GET'])
+def list_notes_by_date():
+    """Retorna anotacoes de um dia especifico, agrupadas por curso > aula."""
+    from datetime import datetime, timedelta
+    date_str = request.args.get('date')
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Formato de data invalido. Use YYYY-MM-DD.'}), 400
+
+    next_day = date_obj + timedelta(days=1)
+
+    notes = db.session.query(Note, Lesson, Course).join(
+        Lesson, Note.lesson_id == Lesson.id
+    ).join(
+        Course, Lesson.course_id == Course.id
+    ).filter(
+        Note.created_at >= date_obj,
+        Note.created_at < next_day
+    ).order_by(Course.name.asc(), Lesson.hierarchy_path.asc(), Note.timestamp.asc()).all()
+
+    # Agrupar por curso > aula
+    from collections import OrderedDict
+    courses = OrderedDict()
+    for note, lesson, course in notes:
+        if course.id not in courses:
+            courses[course.id] = {
+                'course_id': course.id,
+                'course_name': course.name,
+                'lessons': OrderedDict(),
+                'note_count': 0,
+            }
+        if lesson.id not in courses[course.id]['lessons']:
+            # Build sub_path from module
+            sub_parts = lesson.module.split("/")[1:] if lesson.module and "/" in lesson.module else []
+            sub_path = " > ".join(p.strip() for p in sub_parts if p.strip())
+            display = f"{sub_path} > {lesson.title}" if sub_path else lesson.title
+            courses[course.id]['lessons'][lesson.id] = {
+                'lesson_id': lesson.id,
+                'lesson_title': lesson.title,
+                'display_path': display,
+                'notes': [],
+            }
+        courses[course.id]['lessons'][lesson.id]['notes'].append({
+            'id': note.id,
+            'lesson_id': note.lesson_id,
+            'timestamp': note.timestamp,
+            'content': note.content,
+            'created_at': note.created_at.isoformat() if note.created_at else None,
+        })
+        courses[course.id]['note_count'] += 1
+
+    result = []
+    for c in courses.values():
+        c['lessons'] = list(c['lessons'].values())
+        result.append(c)
+
+    return jsonify({
+        'date': date_str,
+        'total_notes': len(notes),
+        'total_lessons': len(set(n[1].id for n in notes)),
+        'total_courses': len(courses),
+        'courses': result,
+    })
+
+
+@app.route('/api/notes/by-date/export-pdf', methods=['GET'])
+def export_daily_notes_pdf():
+    """Exporta anotacoes de um dia como PDF."""
+    from datetime import datetime, timedelta
+    date_str = request.args.get('date')
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Formato de data invalido.'}), 400
+
+    next_day = date_obj + timedelta(days=1)
+
+    notes = db.session.query(Note, Lesson, Course).join(
+        Lesson, Note.lesson_id == Lesson.id
+    ).join(
+        Course, Lesson.course_id == Course.id
+    ).filter(
+        Note.created_at >= date_obj,
+        Note.created_at < next_day
+    ).order_by(Course.name.asc(), Lesson.hierarchy_path.asc(), Note.timestamp.asc()).all()
+
+    if not notes:
+        return jsonify({'error': 'Nenhuma anotacao encontrada nesta data.'}), 404
+
+    # Agrupar por curso > aula
+    from collections import OrderedDict
+    courses = OrderedDict()
+    for note, lesson, course in notes:
+        if course.id not in courses:
+            courses[course.id] = {'name': course.name, 'lessons': OrderedDict()}
+        if lesson.id not in courses[course.id]['lessons']:
+            sub_parts = lesson.module.split("/")[1:] if lesson.module and "/" in lesson.module else []
+            sub_path = " > ".join(p.strip() for p in sub_parts if p.strip())
+            display = f"{sub_path} > {lesson.title}" if sub_path else lesson.title
+            courses[course.id]['lessons'][lesson.id] = {'display': display, 'notes': []}
+        courses[course.id]['lessons'][lesson.id]['notes'].append(note)
+
+    # Formatar data para exibicao
+    formatted_date = date_obj.strftime('%d/%m/%Y')
+
+    body_html = ""
+    for course_data in courses.values():
+        body_html += f'<h2>{course_data["name"]}</h2>'
+        for lesson_data in course_data['lessons'].values():
+            body_html += f'<h3>{lesson_data["display"]}</h3>'
+            for n in lesson_data['notes']:
+                body_html += f'''
+                <div class="note">
+                    <p class="timestamp">{_format_timestamp_pdf(n.timestamp)}</p>
+                    {n.content}
+                </div>'''
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>{_pdf_css()}</style></head>
+<body>
+    <h1>Revisao do dia {formatted_date}</h1>
+    <p class="course-name">{len(notes)} anotacoes em {len(courses)} curso(s)</p>
+    {body_html}
+</body></html>"""
+
+    pdf_buf = _generate_pdf(html)
+    if not pdf_buf:
+        return jsonify({'error': 'Erro ao gerar PDF.'}), 500
+
+    return send_file(pdf_buf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f"revisao-{date_str}.pdf")
 
 
 # ── Abrir aplicativos ──

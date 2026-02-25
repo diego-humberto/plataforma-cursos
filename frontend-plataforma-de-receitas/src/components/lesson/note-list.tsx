@@ -242,6 +242,7 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
           onFocus={handleFocus}
           onSubmit={handleSave}
           placeholder="Digite sua anotação... (Ctrl+Enter para salvar)"
+          apiUrl={apiUrl}
         />
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">
@@ -369,6 +370,7 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
                       onChange={setEditContent}
                       onSubmit={() => handleUpdate(note.id)}
                       autoFocus
+                      apiUrl={apiUrl}
                     />
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-muted-foreground">

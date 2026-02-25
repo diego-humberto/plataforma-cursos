@@ -6,7 +6,7 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Course } from "@/models/models";
-import noImage from "../../../public/sem-foto.png";
+const noImage = "/sem-foto.png";
 import { Button } from "../ui/button";
 import DeleteCourse from "./delete-course";
 import EditCourse from "./edit-course";

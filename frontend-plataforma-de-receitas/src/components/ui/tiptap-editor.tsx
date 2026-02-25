@@ -2,9 +2,11 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import ResizableImage from "./tiptap-image-resize";
 import { useEffect } from "react";
 import {
   Bold,
+  ImageIcon,
   Italic,
   Underline as UnderlineIcon,
   Strikethrough,
@@ -21,6 +23,7 @@ type TiptapEditorProps = {
   placeholder?: string;
   autoFocus?: boolean;
   editable?: boolean;
+  apiUrl?: string;
 };
 
 export default function TiptapEditor({
@@ -31,7 +34,28 @@ export default function TiptapEditor({
   placeholder = "Digite sua anotação...",
   autoFocus = false,
   editable = true,
+  apiUrl,
 }: TiptapEditorProps) {
+  const handleImageUpload = async (file: File) => {
+    if (!apiUrl) return;
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const res = await fetch(`${apiUrl}/api/upload-note-image`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) {
+        editorRef.current?.chain().focus().setImage({ src: `${apiUrl}${data.url}` }).run();
+      }
+    } catch {
+      // silent fail
+    }
+  };
+
+  const editorRef = { current: null as any };
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -41,6 +65,7 @@ export default function TiptapEditor({
       Placeholder.configure({
         placeholder,
       }),
+      ResizableImage,
     ],
     content,
     editable,
@@ -67,8 +92,35 @@ export default function TiptapEditor({
         }
         return false;
       },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (file) handleImageUpload(file);
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (_view, event) => {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        for (const file of files) {
+          if (file.type.startsWith("image/")) {
+            event.preventDefault();
+            handleImageUpload(file);
+            return true;
+          }
+        }
+        return false;
+      },
     },
   });
+
+  editorRef.current = editor;
 
   // Sync content from outside (e.g. when clearing after save)
   useEffect(() => {
@@ -148,6 +200,27 @@ export default function TiptapEditor({
         >
           <Code className="h-3.5 w-3.5" />
         </ToolbarButton>
+        {apiUrl && (
+          <>
+            <div className="w-px h-4 bg-border mx-1" />
+            <ToolbarButton
+              active={false}
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/*";
+                input.onchange = () => {
+                  const file = input.files?.[0];
+                  if (file) handleImageUpload(file);
+                };
+                input.click();
+              }}
+              title="Inserir imagem"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+            </ToolbarButton>
+          </>
+        )}
       </div>
 
       {/* Editor */}

@@ -6,6 +6,7 @@ import HomeScreen from "@/pages/home";
 import SettingsPage from "@/pages/settings";
 import FocusPage from "@/pages/focus";
 import NotesPopupPage from "@/pages/notes-popup";
+import DailyReviewPage from "@/pages/daily-review";
 import { ThemeProvider } from "@/components/theme-provider";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -42,6 +43,7 @@ function AppContent() {
             <Route path="/configuracoes" element={<SettingsPage />} />
             <Route path="/cursos" element={<CoursesPage />} />
             <Route path="/foco" element={<FocusPage />} />
+            <Route path="/revisao" element={<DailyReviewPage />} />
           </Routes>
         </ErrorBoundary>
         <FocusMiniWidget />

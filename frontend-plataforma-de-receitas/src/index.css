@@ -147,6 +147,86 @@ h2 {
   padding: 0;
 }
 
+.tiptap img,
+.tiptap-display img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.tiptap-image-wrapper {
+  margin: 0.5em 0;
+}
+
+.tiptap-image-resizable {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.tiptap-image-resizable img {
+  border-radius: 0.375em;
+  margin: 0;
+}
+
+.tiptap-image-resizable.selected img {
+  outline: 2px solid hsl(var(--ring));
+  border-radius: 0.375em;
+}
+
+.tiptap-image-resizable .image-resize-handle {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  background: hsl(var(--ring));
+  border: 2px solid hsl(var(--background));
+  border-radius: 2px;
+  cursor: se-resize;
+  z-index: 10;
+}
+
+.tiptap-image-resizable .image-align-toolbar {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 20;
+}
+
+.tiptap-image-resizable .image-align-toolbar button {
+  padding: 4px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.tiptap-image-resizable .image-align-toolbar button:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.tiptap-image-resizable .image-align-toolbar button.active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
 /* Resize handle entre player e sidebar */
 .resize-handle {
   width: 8px;

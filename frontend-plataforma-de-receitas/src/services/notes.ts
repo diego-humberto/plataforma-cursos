@@ -53,3 +53,56 @@ export async function exportCourseNotesPdf(apiUrl: string, courseId: string): Pr
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export type DailyNoteEntry = {
+  id: number;
+  lesson_id: number;
+  timestamp: number;
+  content: string;
+  created_at: string;
+};
+
+export type DailyLessonGroup = {
+  lesson_id: number;
+  lesson_title: string;
+  display_path: string;
+  notes: DailyNoteEntry[];
+};
+
+export type DailyCourseGroup = {
+  course_id: number;
+  course_name: string;
+  note_count: number;
+  lessons: DailyLessonGroup[];
+};
+
+export type DailyNotesResponse = {
+  date: string;
+  total_notes: number;
+  total_lessons: number;
+  total_courses: number;
+  courses: DailyCourseGroup[];
+};
+
+export async function getNotesByDate(apiUrl: string, date: string): Promise<DailyNotesResponse> {
+  const res = await api.get<DailyNotesResponse>(`${apiUrl}/api/notes/by-date`, {
+    params: { date },
+  });
+  return res.data;
+}
+
+export async function exportDailyNotesPdf(apiUrl: string, date: string): Promise<void> {
+  const res = await api.get(`${apiUrl}/api/notes/by-date/export-pdf`, {
+    params: { date },
+    responseType: 'blob',
+  });
+  const contentDisposition = res.headers['content-disposition'];
+  const match = contentDisposition?.match(/filename="?(.+?)"?$/);
+  const filename = match?.[1] || `revisao-${date}.pdf`;
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

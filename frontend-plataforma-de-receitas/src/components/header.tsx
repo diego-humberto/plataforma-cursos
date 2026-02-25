@@ -1,4 +1,4 @@
-import { GraduationCap, Timer } from "lucide-react";
+import { BookMarked, GraduationCap, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "./mode-theme-toggle";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +38,11 @@ function Header() {
           </Button>
 
           <DailyReadingsDrawer />
+
+          <Button onClick={() => handleNavigate("/revisao")} variant="link">
+            <BookMarked className="h-4 w-4 mr-1" />
+            Revisão
+          </Button>
 
           <Button
             onClick={() => handleNavigate("/configuracoes")}
