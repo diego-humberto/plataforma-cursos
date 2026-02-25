@@ -560,6 +560,261 @@ def list_annotated_lessons(course_id):
     } for r in results])
 
 
+# ── Exportação de anotações em PDF ──
+
+def _format_timestamp_pdf(seconds):
+    """Formata segundos em HH:MM:SS ou MM:SS para PDF."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def _pdf_css():
+    return """
+        @page { size: A4; margin: 2cm 2.5cm; }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 11pt;
+            color: #222;
+            line-height: 1.5;
+        }
+        h1 {
+            font-size: 14pt;
+            color: #111;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 8px;
+        }
+        h2 {
+            font-size: 14pt;
+            color: #222;
+            margin-top: 24px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 4px;
+        }
+        h3 {
+            font-size: 12pt;
+            color: #333;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+        .course-name {
+            font-size: 10pt;
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 4px;
+        }
+        .module-path {
+            font-size: 10pt;
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        .note {
+            margin-bottom: 6px;
+            margin-top: 14px;
+            padding: 0 0 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .timestamp {
+            font-family: Courier;
+            font-size: 9pt;
+            color: #555;
+            margin-bottom: 2px;
+        }
+        p, div, span, ol, ul, li, strong, em, u, s, code, pre, blockquote {
+            border: 0;
+        }
+        p { margin: 3px 0; }
+        ol {
+            list-style-type: decimal;
+            margin: 4px 0;
+            padding-left: 30px;
+        }
+        ul {
+            list-style-type: disc;
+            margin: 4px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 2px 0;
+            padding-left: 4px;
+        }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+        u { text-decoration: underline; }
+        s { text-decoration: line-through; }
+        code {
+            font-family: Courier;
+            font-size: 10pt;
+            background-color: #f0f0f0;
+            padding: 1px 3px;
+        }
+        pre {
+            font-family: Courier;
+            font-size: 10pt;
+            background-color: #f5f5f5;
+            padding: 8px;
+            margin: 6px 0;
+        }
+        blockquote {
+            border-left: 3px solid #ccc;
+            padding-left: 12px;
+            margin: 6px 0;
+            color: #555;
+        }
+    """
+
+
+def _preprocess_html_for_pdf(html):
+    """Converte <ol>/<ul> para itens numerados/com bullet manualmente (xhtml2pdf não renderiza list-style)."""
+    import re
+
+    def strip_p_tags(text):
+        """Remove <p> e </p> do conteúdo interno de <li>."""
+        return re.sub(r'</?p[^>]*>', '', text).strip()
+
+    def replace_ol(match):
+        content = match.group(1)
+        items = re.findall(r'<li>(.*?)</li>', content, re.DOTALL)
+        result = ''
+        for i, item in enumerate(items, 1):
+            result += f'<p style="margin-left:20px;">{i}. {strip_p_tags(item)}</p>\n'
+        return result
+
+    def replace_ul(match):
+        content = match.group(1)
+        items = re.findall(r'<li>(.*?)</li>', content, re.DOTALL)
+        result = ''
+        for item in items:
+            result += f'<p style="margin-left:20px;">&bull; {strip_p_tags(item)}</p>\n'
+        return result
+
+    html = re.sub(r'<ol[^>]*>(.*?)</ol>', replace_ol, html, flags=re.DOTALL)
+    html = re.sub(r'<ul[^>]*>(.*?)</ul>', replace_ul, html, flags=re.DOTALL)
+    return html
+
+
+def _generate_pdf(html_string):
+    """Converte HTML em PDF usando xhtml2pdf."""
+    from xhtml2pdf import pisa
+    import io
+    html_string = _preprocess_html_for_pdf(html_string)
+    result = io.BytesIO()
+    pisa_status = pisa.CreatePDF(html_string, dest=result)
+    if pisa_status.err:
+        return None
+    result.seek(0)
+    return result
+
+
+@app.route('/api/lessons/<int:lesson_id>/notes/export-pdf', methods=['GET'])
+def export_lesson_notes_pdf(lesson_id):
+    """Exporta anotações de uma aula como PDF."""
+    lesson = Lesson.query.get_or_404(lesson_id)
+    notes = Note.query.filter_by(lesson_id=lesson_id).order_by(Note.timestamp.asc()).all()
+
+    if not notes:
+        return jsonify({'error': 'Nenhuma anotação encontrada para esta aula.'}), 404
+
+    course = Course.query.get(lesson.course_id)
+    course_name = course.name if course else ""
+
+    # Montar caminho completo: Curso > Módulo > Aula
+    path_parts = []
+    if course_name:
+        path_parts.append(course_name)
+    if lesson.module:
+        module_parts = lesson.module.split("/")
+        path_parts.extend(p.strip() for p in module_parts[1:] if p.strip())
+    path_parts.append(lesson.title)
+    full_path = " &gt; ".join(path_parts)
+
+    notes_html = ""
+    for n in notes:
+        notes_html += f'''
+        <div class="note">
+            <p class="timestamp">{_format_timestamp_pdf(n.timestamp)}</p>
+            {n.content}
+        </div>'''
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>{_pdf_css()}</style></head>
+<body>
+    <h1>{full_path}</h1>
+    {notes_html}
+</body></html>"""
+
+    pdf_buf = _generate_pdf(html)
+    if not pdf_buf:
+        return jsonify({'error': 'Erro ao gerar PDF.'}), 500
+
+    safe_title = secure_filename(lesson.title) or f"aula-{lesson_id}"
+    return send_file(pdf_buf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f"notas-{safe_title}.pdf")
+
+
+@app.route('/api/courses/<int:course_id>/notes/export-pdf', methods=['GET'])
+def export_course_notes_pdf(course_id):
+    """Exporta todas as anotações de um curso como PDF, agrupadas por módulo > aula."""
+    course = Course.query.get_or_404(course_id)
+
+    lessons_with_notes = db.session.query(Lesson).join(Note).filter(
+        Lesson.course_id == course_id,
+        Lesson.is_active == 1
+    ).order_by(Lesson.hierarchy_path.asc()).all()
+
+    if not lessons_with_notes:
+        return jsonify({'error': 'Nenhuma anotação encontrada neste curso.'}), 404
+
+    from collections import OrderedDict
+    modules = OrderedDict()
+    for lesson in lessons_with_notes:
+        module_key = lesson.module.split("/")[0] if lesson.module else "(Raiz)"
+        if module_key not in modules:
+            modules[module_key] = []
+        modules[module_key].append(lesson)
+
+    body_html = ""
+    for module_name, lessons in modules.items():
+        body_html += f'<h2>{module_name}</h2>'
+        for lesson in lessons:
+            notes = Note.query.filter_by(lesson_id=lesson.id).order_by(Note.timestamp.asc()).all()
+            if not notes:
+                continue
+
+            sub_path = "/".join(lesson.module.split("/")[1:]) if lesson.module and "/" in lesson.module else ""
+            display_title = f"{sub_path} &gt; {lesson.title}" if sub_path else lesson.title
+
+            body_html += f'<h3>{display_title}</h3>'
+            for n in notes:
+                body_html += f'''
+                <div class="note">
+                    <p class="timestamp">{_format_timestamp_pdf(n.timestamp)}</p>
+                    {n.content}
+                </div>'''
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>{_pdf_css()}</style></head>
+<body>
+    <h1>{course.name}</h1>
+    <p class="course-name">Anotações do curso</p>
+    {body_html}
+</body></html>"""
+
+    pdf_buf = _generate_pdf(html)
+    if not pdf_buf:
+        return jsonify({'error': 'Erro ao gerar PDF.'}), 500
+
+    safe_name = secure_filename(course.name) or f"curso-{course_id}"
+    return send_file(pdf_buf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f"notas-{safe_name}.pdf")
+
+
 # ── Abrir aplicativos ──
 
 @app.route('/api/open-app', methods=['POST'])

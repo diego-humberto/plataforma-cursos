@@ -3,9 +3,10 @@ import useApiUrl from "@/hooks/useApiUrl";
 import { useEffect, useRef, useState, memo } from "react";
 import { Button } from "../ui/button";
 import TiptapEditor from "../ui/tiptap-editor";
-import { BookOpen, Clock, Loader2, MessageSquareText, Pencil, StickyNote, Trash2 } from "lucide-react";
+import { BookOpen, Clock, Download, Loader2, MessageSquareText, Pencil, StickyNote, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { getNotes, createNote, updateNote, deleteNote } from "@/services/notes";
+import { getNotes, createNote, updateNote, deleteNote, exportLessonNotesPdf, exportCourseNotesPdf } from "@/services/notes";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,7 +47,12 @@ function buildAnnotatedTree(lessons: AnnotatedLesson[]) {
   }
   return Object.entries(groups)
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
-    .map(([title, lessons]) => ({ title, lessons }));
+    .map(([title, lessons]) => ({
+      title,
+      lessons: lessons.sort((a, b) =>
+        (a.hierarchy_path || a.module || "").localeCompare(b.hierarchy_path || b.module || "", undefined, { numeric: true, sensitivity: "base" })
+      ),
+    }));
 }
 
 const HTML_TAG_REGEX = /<[a-z][\s\S]*?>/i;
@@ -191,6 +197,24 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
     }
   };
 
+  const handleExportLesson = async () => {
+    if (!lessonId) return;
+    try {
+      await exportLessonNotesPdf(apiUrl, lessonId);
+    } catch {
+      toast.error("Erro ao exportar anotações.");
+    }
+  };
+
+  const handleExportCourse = async () => {
+    if (!courseId) return;
+    try {
+      await exportCourseNotesPdf(apiUrl, courseId);
+    } catch {
+      toast.error("Erro ao exportar anotações do curso.");
+    }
+  };
+
   if (!lessonId) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-8 text-muted-foreground">
@@ -264,6 +288,23 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
           </div>
         ) : (
           <div className="p-2 space-y-2">
+            <div className="flex justify-end">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={handleExportLesson}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Exportar notas desta aula</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             {notes.map((note) => (
               <div
                 key={note.id}
@@ -355,10 +396,27 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
       {/* Aulas com anotações - navegação por hierarquia */}
       {annotatedLessons.length > 1 && onNavigateToLesson && (
         <div className="border-t p-3">
-          <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-            <MessageSquareText className="h-3 w-3" />
-            Aulas com anotações
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <MessageSquareText className="h-3 w-3" />
+              Aulas com anotações
+            </p>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={handleExportCourse}
+                  >
+                    <Download className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Exportar todas as anotações do curso</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {buildAnnotatedTree(annotatedLessons).map((group) => (
               <div key={group.title}>
