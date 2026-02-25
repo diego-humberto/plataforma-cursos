@@ -16,7 +16,7 @@ import {
   DEFAULT_DAILY_HOURS,
   SUBJECT_COLORS,
 } from "@/components/focus/constants";
-import { getCycleConfig, saveCycleConfig, createFocusSession, getTimerState, saveTimerState } from "@/services/focusSessions";
+import { getCycleConfig, saveCycleConfig, createFocusSession, getTimerState, saveTimerState, getFocusSessions } from "@/services/focusSessions";
 
 const WEEKDAY_KEYS: (keyof DailyHoursConfig)[] = [
   "dom", "seg", "ter", "qua", "qui", "sex", "sab",
@@ -76,11 +76,13 @@ interface FocusStore {
   resetTimer: () => void;
   skipTimer: () => void;
   completeTimer: () => void;
+  saveAndStopTimer: () => void;
 
   // Subject actions
   addSubject: (name: string, emphasis: number) => void;
   removeSubject: (id: string) => void;
   updateSubject: (id: string, updates: Partial<Pick<CycleSubject, "name" | "emphasis" | "color">>) => void;
+  moveSubject: (index: number, direction: "up" | "down") => void;
   switchToSubject: (index: number) => void;
 
   // Config actions
@@ -155,7 +157,7 @@ const useFocusTimer = create<FocusStore>()(
           const progress = newCycle.subjectProgress[newCycle.currentSubjectIndex];
           if (progress) {
             const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
-            durationMs = remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000;
+            durationMs = remainingMs;
           } else {
             durationMs = 60 * 60000; // fallback 60min
           }
@@ -212,7 +214,7 @@ const useFocusTimer = create<FocusStore>()(
           if (progress) {
             // Usar tempo restante (alocado - já completado) para não ignorar progresso anterior
             const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
-            durationMs = remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000;
+            durationMs = remainingMs;
           } else {
             durationMs = 60 * 60000;
           }
@@ -235,6 +237,57 @@ const useFocusTimer = create<FocusStore>()(
 
       skipTimer: () => {
         get().completeTimer();
+      },
+
+      saveAndStopTimer: () => {
+        const { timer, cycle, cycleConfig } = get();
+        if (timer.status === "idle" || timer.mode !== "focus") return;
+
+        const elapsed = timer.accumulatedMs + (timer.startedAt ? Date.now() - timer.startedAt : 0);
+        if (elapsed <= 0) return;
+
+        // Atualizar progresso da matéria atual (sem avançar para a próxima)
+        const idx = cycle.currentSubjectIndex;
+        const newProgress = [...cycle.subjectProgress];
+        if (newProgress[idx]) {
+          newProgress[idx] = {
+            ...newProgress[idx],
+            completedMs: newProgress[idx].completedMs + elapsed,
+            pomodorosCompleted: newProgress[idx].pomodorosCompleted + 1,
+          };
+        }
+
+        // Calcular duração restante para a mesma matéria
+        const { pomodoroSettings } = cycleConfig;
+        let newDurationMs: number;
+        if (pomodoroSettings.timerType === "continuous") {
+          const progress = newProgress[idx];
+          if (progress) {
+            const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
+            newDurationMs = remainingMs > 0 ? remainingMs : 0;
+          } else {
+            newDurationMs = 0;
+          }
+        } else {
+          newDurationMs = getModeDuration(timer.mode, pomodoroSettings);
+        }
+
+        // Incrementar pomodoroCount para que o subscriber salve a FocusSession
+        set({
+          timer: {
+            ...timer,
+            status: "idle",
+            mode: "focus",
+            startedAt: null,
+            accumulatedMs: 0,
+            durationMs: newDurationMs,
+            pomodoroCount: timer.pomodoroCount + 1,
+          },
+          cycle: {
+            ...cycle,
+            subjectProgress: newProgress,
+          },
+        });
       },
 
       completeTimer: () => {
@@ -296,7 +349,7 @@ const useFocusTimer = create<FocusStore>()(
           // Advance to next subject
           const nextProgress = newProgress[nextIndex];
           const nextDuration = nextProgress
-            ? Math.max(0, nextProgress.allocatedMinutes * 60000 - nextProgress.completedMs) || nextProgress.allocatedMinutes * 60000
+            ? Math.max(0, nextProgress.allocatedMinutes * 60000 - nextProgress.completedMs)
             : 60 * 60000;
 
           set({
@@ -394,6 +447,35 @@ const useFocusTimer = create<FocusStore>()(
         get().recalculateAllocations();
       },
 
+      moveSubject: (index, direction) => {
+        const { cycleConfig, cycle } = get();
+        const subjects = [...cycleConfig.subjects];
+        const swapIndex = direction === "up" ? index - 1 : index + 1;
+        if (swapIndex < 0 || swapIndex >= subjects.length) return;
+
+        // Trocar posição das matérias
+        [subjects[index], subjects[swapIndex]] = [subjects[swapIndex], subjects[index]];
+
+        // Trocar progresso correspondente
+        const progress = [...cycle.subjectProgress];
+        if (progress[index] && progress[swapIndex]) {
+          [progress[index], progress[swapIndex]] = [progress[swapIndex], progress[index]];
+        }
+
+        // Ajustar currentSubjectIndex se necessário
+        let newCurrentIndex = cycle.currentSubjectIndex;
+        if (cycle.currentSubjectIndex === index) {
+          newCurrentIndex = swapIndex;
+        } else if (cycle.currentSubjectIndex === swapIndex) {
+          newCurrentIndex = index;
+        }
+
+        set({
+          cycleConfig: { ...cycleConfig, subjects },
+          cycle: { ...cycle, subjectProgress: progress, currentSubjectIndex: newCurrentIndex },
+        });
+      },
+
       switchToSubject: (index) => {
         const { cycle, cycleConfig, timer } = get();
         if (index >= 0 && index < cycleConfig.subjects.length) {
@@ -405,7 +487,7 @@ const useFocusTimer = create<FocusStore>()(
               const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
               updates.timer = {
                 ...timer,
-                durationMs: remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000,
+                durationMs: remainingMs,
               };
             }
           }
@@ -430,7 +512,7 @@ const useFocusTimer = create<FocusStore>()(
               updates.timer = {
                 ...timer,
                 mode: "focus",
-                durationMs: remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000,
+                durationMs: remainingMs,
               };
             }
           } else {
@@ -476,7 +558,7 @@ const useFocusTimer = create<FocusStore>()(
             const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
             updates.timer = {
               ...timer,
-              durationMs: remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000,
+              durationMs: remainingMs,
             };
           }
         }
@@ -558,63 +640,108 @@ const useFocusTimer = create<FocusStore>()(
               const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
               state.timer = {
                 ...currentTimer,
-                durationMs: remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000,
+                durationMs: remainingMs,
               };
             }
           }
 
           // Load from backend (backend has priority)
+          // Chamadas sequenciadas para evitar race conditions:
+          // config PRIMEIRO → timer state DEPOIS → sessions POR ÚLTIMO
           const apiUrl = localStorage.getItem("apiUrl") || "http://localhost:9823";
+          const today = getTodayStr();
 
-          // 1. Load cycleConfig from backend
-          getCycleConfig(apiUrl)
-            .then((backendConfig) => {
+          (async () => {
+            try {
+              // 1. Load cycleConfig from backend (PRIMEIRO — define alocações)
+              const backendConfig = await getCycleConfig(apiUrl).catch(() => null);
               if (backendConfig && backendConfig.subjects && backendConfig.subjects.length > 0) {
                 useFocusTimer.setState({ cycleConfig: backendConfig });
                 useFocusTimer.getState().recalculateAllocations();
               } else if (cycleConfig.subjects.length > 0) {
                 saveCycleConfig(apiUrl, cycleConfig).catch(() => {});
               }
-            })
-            .catch(() => {});
 
-          // 2. Load timer+cycle state from backend (cross-browser persistence)
-          getTimerState(apiUrl)
-            .then((backendState) => {
+              // 2. Load timer+cycle state from backend (DEPOIS — usa config já atualizada)
+              const backendState = await getTimerState(apiUrl).catch(() => null);
               if (!backendState) {
-                // Backend empty — push current localStorage state
                 const current = useFocusTimer.getState();
                 saveTimerState(apiUrl, { timer: current.timer, cycle: current.cycle }).catch(() => {});
-                return;
-              }
+              } else {
+                const bt = backendState.timer;
+                const bc = backendState.cycle;
 
-              const bt = backendState.timer;
-              const bc = backendState.cycle;
+                // Se o timer estava rodando no backend, pausar e calcular tempo acumulado
+                if (bt.status === "running" && bt.startedAt) {
+                  const elapsed = Date.now() - bt.startedAt;
+                  const totalAccumulated = Math.min(bt.accumulatedMs + elapsed, bt.durationMs);
+                  bt.status = "paused";
+                  bt.startedAt = null;
+                  bt.accumulatedMs = totalAccumulated;
+                }
 
-              // Se o timer estava rodando no backend, pausar e calcular tempo acumulado
-              if (bt.status === "running" && bt.startedAt) {
-                const elapsed = Date.now() - bt.startedAt;
-                const totalAccumulated = Math.min(bt.accumulatedMs + elapsed, bt.durationMs);
-                bt.status = "paused";
-                bt.startedAt = null;
-                bt.accumulatedMs = totalAccumulated;
-              }
-
-              // Sync idle timer duration (continuous mode)
-              if (bt.status === "idle") {
-                const settings = useFocusTimer.getState().cycleConfig.pomodoroSettings;
-                if (settings.timerType === "continuous") {
-                  const progress = bc.subjectProgress[bc.currentSubjectIndex];
-                  if (progress) {
-                    const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
-                    bt.durationMs = remainingMs > 0 ? remainingMs : progress.allocatedMinutes * 60000;
+                // Sync idle timer duration (continuous mode)
+                if (bt.status === "idle") {
+                  const settings = useFocusTimer.getState().cycleConfig.pomodoroSettings;
+                  if (settings.timerType === "continuous") {
+                    const progress = bc.subjectProgress[bc.currentSubjectIndex];
+                    if (progress) {
+                      const remainingMs = Math.max(0, progress.allocatedMinutes * 60000 - progress.completedMs);
+                      bt.durationMs = remainingMs;
+                    }
                   }
                 }
+
+                useFocusTimer.setState({ timer: bt, cycle: bc });
               }
 
-              useFocusTimer.setState({ timer: bt, cycle: bc });
-            })
-            .catch(() => {});
+              // 3. Recuperar completedMs a partir das sessões reais de hoje (POR ÚLTIMO)
+              const sessions = await getFocusSessions(apiUrl, today).catch(() => null);
+              if (sessions && sessions.length > 0) {
+                // IDs do ciclo são UUIDs (contêm hífens no padrão 8-4-4-4-12)
+                const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(id);
+
+                // Somar duração por subject_id (apenas sessões do ciclo)
+                const bySubject: Record<string, number> = {};
+                for (const s of sessions) {
+                  if (s.mode === "focus" && s.subject_id && isUuid(s.subject_id)) {
+                    bySubject[s.subject_id] = (bySubject[s.subject_id] || 0) + s.duration_seconds * 1000;
+                  }
+                }
+
+                const current = useFocusTimer.getState();
+                const progress = [...current.cycle.subjectProgress];
+                let changed = false;
+
+                for (let i = 0; i < progress.length; i++) {
+                  const dbMs = bySubject[progress[i].subjectId] || 0;
+                  // Se o banco tem mais progresso que o estado em memória, corrigir
+                  if (dbMs > progress[i].completedMs) {
+                    progress[i] = { ...progress[i], completedMs: dbMs };
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  const updates: any = { cycle: { ...current.cycle, subjectProgress: progress } };
+                  // Atualizar durationMs se timer está idle em modo contínuo
+                  if (current.timer.status === "idle" && current.cycleConfig.pomodoroSettings.timerType === "continuous") {
+                    const p = progress[current.cycle.currentSubjectIndex];
+                    if (p) {
+                      const remainingMs = Math.max(0, p.allocatedMinutes * 60000 - p.completedMs);
+                      updates.timer = {
+                        ...current.timer,
+                        durationMs: remainingMs > 0 ? remainingMs : 0,
+                      };
+                    }
+                  }
+                  useFocusTimer.setState(updates);
+                }
+              }
+            } catch {
+              // Backend inacessível — manter estado do localStorage
+            }
+          })();
         };
       },
       partialize: (state) => ({
@@ -686,11 +813,12 @@ useFocusTimer.subscribe((state) => {
     _sessionSubjectId = null;
   }
 
-  // Salvar quando pomodoroCount aumenta (= timer completou naturalmente)
+  // Salvar quando pomodoroCount aumenta (= timer completou ou saveAndStop)
   if (state.timer.pomodoroCount > _sessionPrevPomodoroCount) {
     if (_sessionStartIso && _sessionSubjectName && _sessionSubjectId) {
       const now = new Date();
-      const durationSeconds = Math.round(_sessionDurationMs / 1000);
+      const realElapsedSeconds = Math.round((now.getTime() - new Date(_sessionStartIso).getTime()) / 1000);
+      const durationSeconds = Math.min(realElapsedSeconds, Math.round(_sessionDurationMs / 1000));
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
       const apiUrl = localStorage.getItem("apiUrl") || "http://localhost:9823";

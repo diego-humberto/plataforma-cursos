@@ -224,7 +224,10 @@ def add_course():
     # Processar lições em background thread
     def scan_lessons_background():
         with app.app_context():
-            list_and_register_lessons(path, course.id, extra_paths=extra_paths or None)
+            try:
+                list_and_register_lessons(path, course.id, extra_paths=extra_paths or None)
+            except Exception:
+                scan_progress[course.id] = {"total": 0, "processed": 0, "current_file": "", "done": True, "error": True}
 
     thread = threading.Thread(target=scan_lessons_background)
     thread.daemon = True
@@ -282,7 +285,10 @@ def rescan_course(course_id):
 
     def rescan_background():
         with app.app_context():
-            list_and_register_lessons(course.path, course.id, extra_paths=extra_paths or None)
+            try:
+                list_and_register_lessons(course.path, course.id, extra_paths=extra_paths or None)
+            except Exception:
+                scan_progress[course.id] = {"total": 0, "processed": 0, "current_file": "", "done": True, "error": True}
 
     thread = threading.Thread(target=rescan_background)
     thread.daemon = True
@@ -374,7 +380,10 @@ def update_course(course_id):
     if old_path != course.path or old_extra_paths != new_extra_json:
         def rescan_background():
             with app.app_context():
-                list_and_register_lessons(course.path, course_id, extra_paths=extra_paths or None)
+                try:
+                    list_and_register_lessons(course.path, course_id, extra_paths=extra_paths or None)
+                except Exception:
+                    scan_progress[course_id] = {"total": 0, "processed": 0, "current_file": "", "done": True, "error": True}
 
         thread = threading.Thread(target=rescan_background)
         thread.daemon = True

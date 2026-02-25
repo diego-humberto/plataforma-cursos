@@ -1,4 +1,4 @@
-import { Trash2, Info } from "lucide-react";
+import { Trash2, Info, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import useFocusTimer from "@/hooks/useFocusTimer";
@@ -14,6 +14,7 @@ export function SubjectList() {
   const subjects = useFocusTimer((s) => s.cycleConfig.subjects);
   const updateSubject = useFocusTimer((s) => s.updateSubject);
   const removeSubject = useFocusTimer((s) => s.removeSubject);
+  const moveSubject = useFocusTimer((s) => s.moveSubject);
   const status = useFocusTimer((s) => s.timer.status);
 
   const totalEmphasis = subjects.reduce((sum, s) => sum + s.emphasis, 0);
@@ -45,10 +46,32 @@ export function SubjectList() {
       )}
 
       <div className="space-y-2">
-        {subjects.map((subject) => {
+        {subjects.map((subject, index) => {
           const pct = totalEmphasis > 0 ? Math.round((subject.emphasis / totalEmphasis) * 100) : 0;
           return (
             <div key={subject.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+              {status === "idle" && subjects.length > 1 && (
+                <div className="flex flex-col shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => moveSubject(index, "up")}
+                    disabled={index === 0}
+                    className="h-5 w-5 p-0"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => moveSubject(index, "down")}
+                    disabled={index === subjects.length - 1}
+                    className="h-5 w-5 p-0"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
               <input
                 type="color"
                 value={subject.color}

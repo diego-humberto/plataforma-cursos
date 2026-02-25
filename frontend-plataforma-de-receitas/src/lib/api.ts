@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const api = axios.create();
+const api = axios.create({
+  timeout: 30000,
+});
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;

@@ -34,3 +34,4 @@ instance/
 # Banco de dados (protecao extra)
 *.sqlite
 *.db
+.gitnexus
