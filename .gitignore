@@ -1,6 +1,9 @@
 # Claude Code
 .claude/
 .mcp.json
+CLAUDE.md
+AGENTS.md
+AUDITORIA-PLATAFORMA.md
 
 # OS
 Thumbs.db
