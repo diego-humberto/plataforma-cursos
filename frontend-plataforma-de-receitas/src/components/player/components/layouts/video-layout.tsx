@@ -27,18 +27,18 @@ export function VideoLayout({ thumbnails, title }: VideoLayoutProps) {
         hideDelay={2000}
       >
         <div className="flex-1" />
-        <Controls.Group className="flex w-full items-center px-4 bg-gradient-to-t from-black/70 to-black/40">
+        <Controls.Group className="flex w-full items-center px-3 bg-gradient-to-t from-black/80 to-transparent pt-6">
           <Sliders.Time thumbnails={thumbnails} />
         </Controls.Group>
-        <Controls.Group className="-mt-0.5 flex w-full items-center px-4 pb-3 bg-gradient-to-t from-black/70 to-black/40">
+        <Controls.Group className="-mt-0.5 flex w-full items-center gap-0.5 px-3 pb-2 bg-black/80">
           <Buttons.Play tooltipPlacement="top start" />
           <Buttons.SeekBackward tooltipPlacement="top" />
           <Buttons.SeekForward tooltipPlacement="top" />
-          <Title title={title} />
-          <div className="flex-1" />
-          <TimeGroup />
           <Buttons.Mute tooltipPlacement="top" />
           <Sliders.Volume />
+          <TimeGroup />
+          <Title title={title} />
+          <div className="flex-1" />
           <Buttons.Caption tooltipPlacement="top" />
           <Menus.Settings placement="top end" tooltipPlacement="top" />
           <Buttons.PIP tooltipPlacement="top" />

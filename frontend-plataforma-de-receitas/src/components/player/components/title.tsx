@@ -6,7 +6,7 @@ export interface TitleProps {
 
 export function Title({ title }: TitleProps) {
   return (
-    <span className="inline-block overflow-hidden text-ellipsis whitespace-nowrap px-2 text-sm font-semibold uppercase tracking-wide text-white">
+    <span className="inline-block overflow-hidden text-ellipsis whitespace-nowrap px-2 text-xs font-medium text-white/70">
       {title || <ChapterTitle />}
     </span>
   );

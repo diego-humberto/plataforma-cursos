@@ -62,6 +62,7 @@ function buildSubtitleTracks(
 }
 
 const NEXT_LESSON_COUNTDOWN = 10;
+const AUTOPLAY_KEY = "autoPlayNextLesson";
 
 type Props = {
   lesson: Lesson | null;
@@ -107,6 +108,9 @@ export default function LessonViewer({
   const [showNextOverlay, setShowNextOverlay] = useState(false);
   const [countdown, setCountdown] = useState(NEXT_LESSON_COUNTDOWN);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [autoPlayNext, setAutoPlayNext] = useState(() =>
+    localStorage.getItem(AUTOPLAY_KEY) !== "false"
+  );
   const { apiUrl } = useApiUrl();
   const isDocument = lesson
     ? isDocumentFile(lesson.pdf_url || lesson.video_url)
@@ -142,9 +146,20 @@ export default function LessonViewer({
     }
   }, [overlayLesson, onSelectLesson]);
 
-  // Countdown timer
+  const toggleAutoPlay = useCallback(() => {
+    setAutoPlayNext((prev) => {
+      const next = !prev;
+      localStorage.setItem(AUTOPLAY_KEY, String(next));
+      if (!next && countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+      return next;
+    });
+  }, []);
+
+  // Countdown timer (só roda se autoPlayNext estiver ativo)
   useEffect(() => {
-    if (!showNextOverlay || !overlayLesson) return;
+    if (!showNextOverlay || !overlayLesson || !autoPlayNext) return;
     setCountdown(NEXT_LESSON_COUNTDOWN);
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
@@ -160,7 +175,7 @@ export default function LessonViewer({
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [showNextOverlay, navigateToOverlay]);
+  }, [showNextOverlay, navigateToOverlay, autoPlayNext]);
 
   const handleVideoEnded = useCallback(() => {
     if (overlayLesson) {
@@ -265,7 +280,7 @@ export default function LessonViewer({
             </div>
           )}
 
-          {/* Overlay Netflix-style: próxima aula */}
+          {/* Overlay: próxima aula */}
           {showNextOverlay && overlayLesson && (
             <div className="absolute bottom-16 right-4 z-50 animate-in slide-in-from-right-5 fade-in duration-300">
               <div className="bg-black/90 backdrop-blur-sm rounded-lg border border-white/10 p-4 shadow-2xl w-72">
@@ -280,10 +295,10 @@ export default function LessonViewer({
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="text-sm font-medium text-white leading-snug mb-4 line-clamp-2">
+                <p className="text-sm font-medium text-white leading-snug mb-3 line-clamp-2">
                   {overlayLesson.title}
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-3">
                   <button
                     onClick={goNextNow}
                     className="flex-1 flex items-center justify-center gap-2 bg-white text-black font-semibold text-sm py-2 px-4 rounded-md hover:bg-white/90 transition-colors"
@@ -291,21 +306,32 @@ export default function LessonViewer({
                     <Play className="h-3.5 w-3.5 fill-current" />
                     Reproduzir
                   </button>
-                  <div className="relative h-9 w-9 shrink-0">
-                    <svg className="h-9 w-9 -rotate-90" viewBox="0 0 36 36">
-                      <circle cx="18" cy="18" r="15.5" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="2" />
-                      <circle
-                        cx="18" cy="18" r="15.5" fill="none" stroke="white" strokeWidth="2"
-                        strokeDasharray={2 * Math.PI * 15.5}
-                        strokeDashoffset={2 * Math.PI * 15.5 * (1 - countdown / NEXT_LESSON_COUNTDOWN)}
-                        strokeLinecap="round"
-                        className="transition-all duration-1000 ease-linear"
-                      />
-                    </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
-                      {countdown}
-                    </span>
-                  </div>
+                  {autoPlayNext && (
+                    <div className="relative h-9 w-9 shrink-0">
+                      <svg className="h-9 w-9 -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="2" />
+                        <circle
+                          cx="18" cy="18" r="15.5" fill="none" stroke="white" strokeWidth="2"
+                          strokeDasharray={2 * Math.PI * 15.5}
+                          strokeDashoffset={2 * Math.PI * 15.5 * (1 - countdown / NEXT_LESSON_COUNTDOWN)}
+                          strokeLinecap="round"
+                          className="transition-all duration-1000 ease-linear"
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+                        {countdown}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                  <span className="text-[11px] text-white/50">Reprodução automática</span>
+                  <button
+                    onClick={toggleAutoPlay}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${autoPlayNext ? "bg-green-500" : "bg-white/20"}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${autoPlayNext ? "translate-x-[19px]" : "translate-x-[3px]"}`} />
+                  </button>
                 </div>
               </div>
             </div>

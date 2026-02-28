@@ -2,18 +2,18 @@ import { TimeSlider, VolumeSlider } from '@vidstack/react';
 
 export function Volume() {
   return (
-    <VolumeSlider.Root className="volume-slider group relative mx-[7.5px] inline-flex h-10 w-full max-w-[80px] cursor-pointer touch-none select-none items-center outline-none aria-hidden:hidden">
-      <VolumeSlider.Track className="relative ring-media-focus z-0 h-[5px] w-full rounded-sm bg-white/30 group-data-[focus]:ring-[3px]">
-        <VolumeSlider.TrackFill className="bg-media-brand absolute h-full w-[var(--slider-fill)] rounded-sm will-change-[width]" />
+    <VolumeSlider.Root className="volume-slider group relative mx-1 inline-flex h-8 w-full max-w-[70px] cursor-pointer touch-none select-none items-center outline-none aria-hidden:hidden">
+      <VolumeSlider.Track className="relative ring-media-focus z-0 h-[3px] w-full rounded-full bg-white/30 group-data-[focus]:ring-[3px]">
+        <VolumeSlider.TrackFill className="bg-white absolute h-full w-[var(--slider-fill)] rounded-full will-change-[width]" />
       </VolumeSlider.Track>
 
       <VolumeSlider.Preview
         className="flex flex-col items-center opacity-0 transition-opacity duration-200 data-[visible]:opacity-100 pointer-events-none"
         noClamp
       >
-        <VolumeSlider.Value className="rounded-sm bg-black px-2 py-px text-[13px] font-medium" />
+        <VolumeSlider.Value className="rounded-sm bg-black/90 px-1.5 py-px text-[11px] font-medium" />
       </VolumeSlider.Preview>
-      <VolumeSlider.Thumb className="absolute left-[var(--slider-fill)] top-1/2 z-20 h-[15px] w-[15px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#cacaca] bg-white opacity-0 ring-white/40 transition-opacity group-data-[active]:opacity-100 group-data-[dragging]:ring-4 will-change-[left]" />
+      <VolumeSlider.Thumb className="absolute left-[var(--slider-fill)] top-1/2 z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow-sm ring-white/40 transition-opacity group-data-[active]:opacity-100 group-data-[dragging]:ring-4 will-change-[left]" />
     </VolumeSlider.Root>
   );
 }
@@ -24,7 +24,7 @@ export interface TimeSliderProps {
 
 export function Time({ thumbnails }: TimeSliderProps) {
   return (
-    <TimeSlider.Root className="time-slider group relative mx-[7.5px] inline-flex h-10 w-full cursor-pointer touch-none select-none items-center outline-none">
+    <TimeSlider.Root className="time-slider group relative mx-1 inline-flex h-8 w-full cursor-pointer touch-none select-none items-center outline-none">
       <TimeSlider.Chapters className="relative flex h-full w-full items-center rounded-[1px]">
         {(cues, forwardRef) =>
           cues.map((cue) => (
@@ -34,16 +34,16 @@ export function Time({ thumbnails }: TimeSliderProps) {
               key={cue.startTime}
               ref={forwardRef}
             >
-              <TimeSlider.Track className="relative ring-media-focus z-0 h-[3px] w-full rounded-sm bg-white/20 group-data-[focus]:ring-[3px]">
-                <TimeSlider.Progress className="absolute z-[1] h-full w-[var(--chapter-progress)] rounded-sm bg-white/40 will-change-[width]" />
-                <TimeSlider.TrackFill className="absolute z-[2] h-full w-[var(--chapter-fill)] rounded-sm bg-green-500 will-change-[width]" />
+              <TimeSlider.Track className="relative ring-media-focus z-0 h-[3px] w-full rounded-full bg-white/20 transition-[height] duration-150 group-hover:h-[5px] group-data-[focus]:ring-[3px]">
+                <TimeSlider.Progress className="absolute z-[1] h-full w-[var(--chapter-progress)] rounded-full bg-white/30 will-change-[width]" />
+                <TimeSlider.TrackFill className="absolute z-[2] h-full w-[var(--chapter-fill)] rounded-full bg-green-500 will-change-[width]" />
               </TimeSlider.Track>
             </div>
           ))
         }
       </TimeSlider.Chapters>
 
-      <TimeSlider.Thumb className="absolute left-[var(--slider-fill)] top-1/2 z-20 h-[15px] w-[15px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#cacaca] bg-white opacity-0 ring-white/40 transition-opacity group-data-[active]:opacity-100 group-data-[dragging]:ring-4 will-change-[left]" />
+      <TimeSlider.Thumb className="absolute left-[var(--slider-fill)] top-1/2 z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow-sm ring-white/40 transition-opacity group-data-[active]:opacity-100 group-data-[dragging]:ring-4 will-change-[left]" />
 
       <TimeSlider.Preview className="flex flex-col items-center opacity-0 transition-opacity duration-200 data-[visible]:opacity-100 pointer-events-none">
         {thumbnails ? (
