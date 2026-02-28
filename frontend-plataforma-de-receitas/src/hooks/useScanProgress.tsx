@@ -6,6 +6,8 @@ type ScanProgressEntry = {
   total: number;
   processed: number;
   current_file: string;
+  current_module: string;
+  course_name: string;
   percentage: number;
 };
 
@@ -47,7 +49,7 @@ export function ScanProgressProvider({ children }: { children: React.ReactNode }
     setActiveScans((prev) => {
       const existing = prev.find((s) => s.courseId === courseId);
       if (existing) return prev;
-      return [...prev, { courseId, total: 0, processed: 0, current_file: "", percentage: 0 }];
+      return [...prev, { courseId, total: 0, processed: 0, current_file: "", current_module: "", course_name: "", percentage: 0 }];
     });
 
     const intervalId = window.setInterval(async () => {
@@ -60,7 +62,7 @@ export function ScanProgressProvider({ children }: { children: React.ReactNode }
         setActiveScans((prev) =>
           prev.map((s) =>
             s.courseId === courseId
-              ? { ...s, total: data.total, processed: Math.min(data.processed, data.total), current_file: data.current_file, percentage }
+              ? { ...s, total: data.total, processed: Math.min(data.processed, data.total), current_file: data.current_file, current_module: data.current_module || "", course_name: data.course_name || s.course_name, percentage }
               : s
           )
         );

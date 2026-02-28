@@ -1,7 +1,7 @@
 import { Lesson } from "@/models/models";
 import { formatDuration } from "@/utils/format-duration";
 import { Checkbox } from "../ui/checkbox";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import useApiUrl from "@/hooks/useApiUrl";
@@ -16,7 +16,7 @@ type Props = {
   onComplete: () => void;
 };
 
-export default function LessonListItem({
+const LessonListItem = memo(function LessonListItem({
   lesson,
   selectedLessonId,
   index,
@@ -115,11 +115,20 @@ export default function LessonListItem({
         </div>
       </div>
 
-      <Checkbox 
-        checked={isCompleted} 
-        onCheckedChange={toggleIsCompleted} 
-        className="shrink-0 mt-0.5" 
+      <Checkbox
+        checked={isCompleted}
+        onCheckedChange={toggleIsCompleted}
+        className="shrink-0 mt-0.5"
       />
     </div>
   );
-}
+}, (prev, next) => {
+  return (
+    prev.lesson.id === next.lesson.id &&
+    prev.lesson.isCompleted === next.lesson.isCompleted &&
+    prev.selectedLessonId === next.selectedLessonId &&
+    prev.index === next.index
+  );
+});
+
+export default LessonListItem;

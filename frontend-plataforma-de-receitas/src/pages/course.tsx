@@ -24,7 +24,6 @@ type Props = {};
 export default function CoursePage({}: Props) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [modules, setModules] = useState<NestedModules>({});
   const [isTheaterMode, setIsTheaterMode] = useState(false);
   const playerTimeRef = useRef<number>(0);
   const playerInstanceRef = useRef<any>(null);
@@ -75,7 +74,7 @@ export default function CoursePage({}: Props) {
     }
   }
 
-  async function onOrganize() {
+  const modules = useMemo<NestedModules>(() => {
     const nested: NestedModules = {};
     lessons.forEach((l) => {
       const parts = l.module.split("/");
@@ -90,11 +89,7 @@ export default function CoursePage({}: Props) {
       }
       nested[section][subgroup].push(l);
     });
-    setModules(nested);
-  }
-
-  useEffect(() => {
-    onOrganize();
+    return nested;
   }, [lessons]);
 
   useEffect(() => {

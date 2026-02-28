@@ -56,8 +56,10 @@ def list_and_register_lessons(course_path, course_id, extra_paths=None):
         if extra_paths:
             all_paths.extend([p for p in extra_paths if p and p.strip() and os.path.isdir(p)])
 
+        course = Course.query.get(course_id)
+        course_name = course.name if course else ""
         total = sum(count_files_recursive(p) for p in all_paths if os.path.isdir(p))
-        scan_progress[course_id] = {"total": total, "processed": 0, "current_file": "", "done": False}
+        scan_progress[course_id] = {"total": total, "processed": 0, "current_file": "", "current_module": "", "course_name": course_name, "done": False}
 
         # Rastrear arquivos encontrados no disco
         found_file_paths = set()
@@ -118,6 +120,7 @@ def _merge_lessons_in_directory(directory, course_id, hierarchy_prefix, existing
 
             if course_id in scan_progress:
                 scan_progress[course_id]["current_file"] = entry.name
+                scan_progress[course_id]["current_module"] = hierarchy_prefix
 
             found_file_paths.add(file_path)
 

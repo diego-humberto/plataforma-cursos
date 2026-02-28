@@ -15,7 +15,7 @@ import {
 
 import { toast } from "sonner";
 import ProgressCard from "../progress-card";
-import { CheckCircle2, FolderOpen, Paperclip, FileText, MoreVertical, ExternalLink, Link2, Plus, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, FolderOpen, Paperclip, FileText, MoreVertical, ExternalLink, Link2, Plus, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
@@ -224,10 +224,32 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
     [modules]
   );
 
+  // Pré-computar groupedNodes para todas as seções (evita recálculo a cada render)
+  const sectionGroupedNodes = useMemo(() =>
+    sortedSections.map(([, subgroups]) => {
+      const subgroupEntries = Object.entries(subgroups).sort((a, b) =>
+        a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" })
+      );
+      return toGroupedNodes(subgroupEntries);
+    }),
+    [sortedSections]
+  );
+
   // Estado controlado: seções abertas (outer accordion)
   const [openSections, setOpenSections] = useState<string[]>([]);
   // Estado controlado: subgrupo aberto por seção (inner accordions)
   const [openGroups, setOpenGroups] = useState<Record<string, string | undefined>>({});
+
+  // Estado dos sub-folders colapsáveis (overrides manuais do usuário)
+  const [subFolderState, setSubFolderState] = useState<Map<string, boolean>>(new Map());
+
+  const toggleSubFolder = useCallback((key: string, currentlyExpanded: boolean) => {
+    setSubFolderState((prev) => {
+      const next = new Map(prev);
+      next.set(key, !currentlyExpanded);
+      return next;
+    });
+  }, []);
 
   // Auto-abrir seção e subgrupo da aula selecionada
   useEffect(() => {
@@ -247,11 +269,7 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
     );
 
     // Encontrar o subgrupo ativo dentro da seção
-    const [, subgroups] = sortedSections[activeSectionIndex];
-    const subgroupEntries = Object.entries(subgroups).sort((a, b) =>
-      a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" })
-    );
-    const groupedNodes = toGroupedNodes(subgroupEntries);
+    const groupedNodes = sectionGroupedNodes[activeSectionIndex];
     const activeNodeIndex = groupedNodes.findIndex((node) =>
       node.allLessons.some((l) => l.id === selectedLesson.id)
     );
@@ -261,6 +279,24 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
         ...prev,
         [sectionValue]: `group-${activeSectionIndex}-${activeNodeIndex}`,
       }));
+    }
+
+    // Auto-expandir sub-folder que contém a aula selecionada
+    if (activeNodeIndex >= 0) {
+      const activeNode = groupedNodes[activeNodeIndex];
+      const sectionTitle = sortedSections[activeSectionIndex][0];
+      for (const sub of activeNode.subFolders) {
+        if (sub.lessons.some((l) => l.id === selectedLesson.id)) {
+          const subKey = `${sectionTitle}/${activeNode.title}/${sub.name}`;
+          setSubFolderState((prev) => {
+            if (prev.get(subKey) === true) return prev;
+            const next = new Map(prev);
+            next.set(subKey, true);
+            return next;
+          });
+          break;
+        }
+      }
     }
 
     // Scroll até a aula ativa apenas dentro da sidebar (sem mover a página)
@@ -287,7 +323,7 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
       });
     };
     tryScroll(0);
-  }, [selectedLesson?.id, sortedSections]);
+  }, [selectedLesson?.id, sortedSections, sectionGroupedNodes]);
 
   const handleCompleteLesson = useCallback(() => {
     try {
@@ -338,8 +374,10 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
     );
   }
 
-  function renderGroupedContent(node: GroupedNode) {
+  function renderGroupedContent(node: GroupedNode, nodeKey: string) {
     let counter = 0;
+    let foundFirstIncomplete = false;
+
     return (
       <div className="ml-2 border-l-2 border-neutral-200 dark:border-neutral-700 pl-1">
         {node.directLessons.map((lesson) => {
@@ -350,10 +388,42 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
           const SubIcon = getSubfolderIcon(sub.name);
           const subAllCompleted = isAllCompleted(sub.lessons);
           const subSomeCompleted = isSomeCompleted(sub.lessons);
+          const subKey = `${nodeKey}/${sub.name}`;
+
+          // Default: primeiro sub-folder incompleto fica expandido
+          let defaultExpanded = false;
+          if (!subAllCompleted && !foundFirstIncomplete) {
+            defaultExpanded = true;
+            foundFirstIncomplete = true;
+          }
+
+          const isExpanded = subFolderState.has(subKey)
+            ? subFolderState.get(subKey)!
+            : defaultExpanded;
+
+          // Sempre contar aulas para numeração correta
+          const subStartCounter = counter;
+          counter += sub.lessons.length;
+
           return (
             <div key={sub.name}>
-              <div className="flex items-center gap-2 px-3 py-2 mt-1 border-t border-dashed">
-                <SubIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 mt-1 border-t border-dashed cursor-pointer rounded-sm transition-colors",
+                  "hover:bg-accent/50",
+                )}
+                onClick={() => toggleSubFolder(subKey, isExpanded)}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                )}
+                {subAllCompleted ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                ) : (
+                  <SubIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
                 <span className="text-xs font-medium text-muted-foreground flex-1 truncate">
                   {sub.name}
                 </span>
@@ -368,12 +438,13 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
                   />
                 </div>
               </div>
-              <div className="ml-2 border-l-2 border-neutral-300/50 dark:border-neutral-600/50 pl-1">
-                {sub.lessons.map((lesson) => {
-                  counter++;
-                  return renderLessonItem(lesson, counter);
-                })}
-              </div>
+              {isExpanded && (
+                <div className="ml-2 border-l-2 border-neutral-300/50 dark:border-neutral-600/50 pl-1">
+                  {sub.lessons.map((lesson, i) =>
+                    renderLessonItem(lesson, subStartCounter + i + 1)
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -395,14 +466,7 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
             const isCompleteSection = sectionCompletion === 100;
             const isActiveSection = sectionContainsLesson(subgroups, selectedLesson?.id);
 
-            const subgroupEntries = Object.entries(subgroups).sort((a, b) =>
-              a[0].localeCompare(b[0], undefined, {
-                numeric: true,
-                sensitivity: "base",
-              })
-            );
-
-            const groupedNodes = toGroupedNodes(subgroupEntries);
+            const groupedNodes = sectionGroupedNodes[sectionIndex];
             const isSingleFlat = groupedNodes.length === 1 && groupedNodes[0].subFolders.length === 0;
             const sectionAllCompleted = isAllCompleted(allSectionLessons);
             const sectionSomeCompleted = isSomeCompleted(allSectionLessons);
@@ -599,7 +663,7 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
                               </div>
                             </AccordionTrigger>
                             <AccordionContent>
-                              {renderGroupedContent(node)}
+                              {renderGroupedContent(node, `${sectionTitle}/${node.title}`)}
                             </AccordionContent>
                           </AccordionItem>
                         );

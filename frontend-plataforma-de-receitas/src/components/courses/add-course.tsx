@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import useApiUrl from "@/hooks/useApiUrl";
 import useScanProgress from "@/hooks/useScanProgress";
-import { Loader2, Plus, X } from "lucide-react";
+import { FolderSync, Loader2, Plus, X } from "lucide-react";
 import { Progress } from "../ui/progress";
 
 type Props = {
@@ -174,16 +174,25 @@ export default function AddCourse({ onCreate }: Props) {
   return (
     <div className="flex flex-wrap gap-2 items-center">
       {activeScans.map((scan) => (
-        <div key={scan.courseId} className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-md">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium">Escaneando aulas...</p>
-            <span className="text-sm font-bold">{scan.percentage}%</span>
+        <div key={scan.courseId} className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-md border border-purple-200 dark:border-purple-800">
+          <div className="flex items-center gap-2 mb-2">
+            <FolderSync className="h-4 w-4 text-purple-500 animate-spin" />
+            <p className="text-sm font-medium flex-1 truncate">
+              Escaneando{scan.course_name ? `: ${scan.course_name}` : "..."}
+            </p>
+            <span className="text-sm font-bold tabular-nums">{scan.percentage}%</span>
           </div>
           <Progress value={scan.percentage} className="mb-2" />
-          <p className="text-xs text-muted-foreground truncate">
-            {scan.processed} / {scan.total} arquivos
-            {scan.current_file && ` - ${scan.current_file}`}
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+              {scan.processed.toLocaleString()} / {scan.total.toLocaleString()} arquivos
+            </p>
+            {scan.current_module && (
+              <p className="text-xs text-purple-600 dark:text-purple-400 truncate font-mono" title={scan.current_module}>
+                {scan.current_module}
+              </p>
+            )}
+          </div>
         </div>
       ))}
       {isLoading && activeScans.length === 0 && (
