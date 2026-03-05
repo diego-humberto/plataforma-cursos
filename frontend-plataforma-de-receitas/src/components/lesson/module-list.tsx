@@ -52,7 +52,7 @@ type GroupedNode = {
   title: string;
   allLessons: Lesson[];
   directLessons: Lesson[];
-  subFolders: { name: string; lessons: Lesson[] }[];
+  subFolders: GroupedNode[];
 };
 
 function buildSubgroupTree(entries: [string, Lesson[]][]): SubgroupNode[] {
@@ -106,17 +106,18 @@ function getAllNodeLessons(node: SubgroupNode): Lesson[] {
   return [...node.lessons, ...node.children.flatMap(getAllNodeLessons)];
 }
 
-function toGroupedNodes(entries: [string, Lesson[]][]): GroupedNode[] {
-  const tree = flattenSingleChildNodes(buildSubgroupTree(entries));
-  return tree.map((node) => ({
+function nodeToGrouped(node: SubgroupNode): GroupedNode {
+  return {
     title: node.title,
     allLessons: getAllNodeLessons(node),
     directLessons: node.lessons,
-    subFolders: node.children.map((child) => ({
-      name: child.title,
-      lessons: getAllNodeLessons(child),
-    })),
-  }));
+    subFolders: node.children.map(nodeToGrouped),
+  };
+}
+
+function toGroupedNodes(entries: [string, Lesson[]][]): GroupedNode[] {
+  const tree = flattenSingleChildNodes(buildSubgroupTree(entries));
+  return tree.map(nodeToGrouped);
 }
 
 function getSubfolderIcon(name: string) {
@@ -124,6 +125,17 @@ function getSubfolderIcon(name: string) {
   if (lower.includes("anexo")) return Paperclip;
   if (lower.includes("artigo")) return FileText;
   return FolderOpen;
+}
+
+/** Encontra todas as chaves de sub-folders no caminho até uma aula específica. */
+function findSubFolderPathToLesson(node: GroupedNode, lessonId: number, keyPrefix: string): string[] {
+  for (const sub of node.subFolders) {
+    if (sub.allLessons.some((l) => l.id === lessonId)) {
+      const subKey = `${keyPrefix}/${sub.title}`;
+      return [subKey, ...findSubFolderPathToLesson(sub, lessonId, subKey)];
+    }
+  }
+  return [];
 }
 
 // --- Component ---
@@ -281,21 +293,23 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
       }));
     }
 
-    // Auto-expandir sub-folder que contém a aula selecionada
+    // Auto-expandir sub-folders no caminho da aula selecionada (recursivo)
     if (activeNodeIndex >= 0) {
       const activeNode = groupedNodes[activeNodeIndex];
       const sectionTitle = sortedSections[activeSectionIndex][0];
-      for (const sub of activeNode.subFolders) {
-        if (sub.lessons.some((l) => l.id === selectedLesson.id)) {
-          const subKey = `${sectionTitle}/${activeNode.title}/${sub.name}`;
-          setSubFolderState((prev) => {
-            if (prev.get(subKey) === true) return prev;
-            const next = new Map(prev);
-            next.set(subKey, true);
-            return next;
-          });
-          break;
-        }
+      const pathKeys = findSubFolderPathToLesson(activeNode, selectedLesson.id, `${sectionTitle}/${activeNode.title}`);
+      if (pathKeys.length > 0) {
+        setSubFolderState((prev) => {
+          let changed = false;
+          const next = new Map(prev);
+          for (const key of pathKeys) {
+            if (next.get(key) !== true) {
+              next.set(key, true);
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
       }
     }
 
@@ -374,8 +388,8 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
     );
   }
 
-  function renderGroupedContent(node: GroupedNode, nodeKey: string) {
-    let counter = 0;
+  function renderGroupedContent(node: GroupedNode, nodeKey: string, startCounter: number = 0) {
+    let counter = startCounter;
     let foundFirstIncomplete = false;
 
     return (
@@ -385,10 +399,10 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
           return renderLessonItem(lesson, counter);
         })}
         {node.subFolders.map((sub) => {
-          const SubIcon = getSubfolderIcon(sub.name);
-          const subAllCompleted = isAllCompleted(sub.lessons);
-          const subSomeCompleted = isSomeCompleted(sub.lessons);
-          const subKey = `${nodeKey}/${sub.name}`;
+          const SubIcon = getSubfolderIcon(sub.title);
+          const subAllCompleted = isAllCompleted(sub.allLessons);
+          const subSomeCompleted = isSomeCompleted(sub.allLessons);
+          const subKey = `${nodeKey}/${sub.title}`;
 
           // Default: primeiro sub-folder incompleto fica expandido
           let defaultExpanded = false;
@@ -403,10 +417,10 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
 
           // Sempre contar aulas para numeração correta
           const subStartCounter = counter;
-          counter += sub.lessons.length;
+          counter += sub.allLessons.length;
 
           return (
-            <div key={sub.name}>
+            <div key={sub.title}>
               <div
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 mt-1 border-t border-dashed cursor-pointer rounded-sm transition-colors",
@@ -425,26 +439,20 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
                   <SubIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 )}
                 <span className="text-xs font-medium text-muted-foreground flex-1 truncate">
-                  {sub.name}
+                  {sub.title}
                 </span>
                 <span className="text-[10px] text-muted-foreground shrink-0">
-                  {sub.lessons.filter((l) => l.isCompleted).length}/{sub.lessons.length}
+                  {sub.allLessons.filter((l) => l.isCompleted).length}/{sub.allLessons.length}
                 </span>
                 <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={subAllCompleted ? true : subSomeCompleted ? "indeterminate" : false}
-                    onCheckedChange={(checked) => toggleAllLessons(sub.lessons, checked === true)}
+                    onCheckedChange={(checked) => toggleAllLessons(sub.allLessons, checked === true)}
                     title={subAllCompleted ? "Desmarcar todas" : "Marcar todas como concluídas"}
                   />
                 </div>
               </div>
-              {isExpanded && (
-                <div className="ml-2 border-l-2 border-neutral-300/50 dark:border-neutral-600/50 pl-1">
-                  {sub.lessons.map((lesson, i) =>
-                    renderLessonItem(lesson, subStartCounter + i + 1)
-                  )}
-                </div>
-              )}
+              {isExpanded && renderGroupedContent(sub, subKey, subStartCounter)}
             </div>
           );
         })}
