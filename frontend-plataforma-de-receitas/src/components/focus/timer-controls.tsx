@@ -31,7 +31,7 @@ export function TimerControls() {
               <RotateCcw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Resetar</TooltipContent>
+          <TooltipContent>Resetar (R)</TooltipContent>
         </Tooltip>
 
         {status === "running" ? (
@@ -62,7 +62,7 @@ export function TimerControls() {
               <SkipForward className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Pular</TooltipContent>
+          <TooltipContent>Pular (S)</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -76,9 +76,12 @@ export function TimerControls() {
               <Save className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Salvar progresso e parar</TooltipContent>
+          <TooltipContent>Salvar e parar</TooltipContent>
         </Tooltip>
       </div>
+      <p className="text-[10px] text-muted-foreground text-center mt-1">
+        Espaço iniciar/pausar · R resetar · S pular
+      </p>
     </TooltipProvider>
   );
 }

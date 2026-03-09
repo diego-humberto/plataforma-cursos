@@ -7,6 +7,8 @@ import useFocusTimer from "@/hooks/useFocusTimer";
 export function TimerDisplay() {
   const { progress, display, mode } = useFocusTimerDisplay();
   const currentSubject = useFocusTimer((s) => s.getCurrentSubject());
+  const syncStatus = useFocusTimer((s) => s.syncStatus);
+  const isHydrating = useFocusTimer((s) => s.isHydrating);
   const colors = MODE_COLORS[mode];
 
   return (
@@ -26,6 +28,22 @@ export function TimerDisplay() {
           )}
         </div>
       </CircularProgress>
+
+      {(isHydrating || syncStatus === "error") && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {isHydrating ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
+              <span>Sincronizando...</span>
+            </>
+          ) : (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+              <span>Backend offline</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
