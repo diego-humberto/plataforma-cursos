@@ -1,8 +1,5 @@
-import CoursePercentage from "@/components/course-percentage";
-import LastWatchedCard from "@/components/lesson/last-watched-card";
 import LessonViewer from "@/components/lesson/lesson-viewer";
-import ModuleList from "@/components/lesson/module-list";
-import NoteList from "@/components/lesson/note-list";
+import { CourseSidebar } from "@/components/lesson/course-sidebar";
 import useApiUrl from "@/hooks/useApiUrl";
 import useCourseCompletion from "@/hooks/useCourseCompletion";
 import useSelectedLesson from "@/hooks/useSelectedLesson";
@@ -11,25 +8,27 @@ import { getLessons } from "@/services/getLessons";
 import { getModuleLinks, type ModuleLinks } from "@/services/moduleLinks";
 import api from "@/lib/api";
 import { sortLessons } from "@/utils/sort-lessons";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronDown, ChevronRight, ChevronUp, Home, Search, X } from "lucide-react";
+import { ChevronRight, Home } from "lucide-react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, useDefaultLayout } from "react-resizable-panels";
 import LessonSkeleton from "@/components/lesson/lesson-skeleton";
-import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import type { MediaPlayerInstance } from "@vidstack/react";
 
-type Props = {};
+const ACTIVE_TAB_KEY = "course-sidebar-tab";
 
-export default function CoursePage({}: Props) {
+export default function CoursePage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isTheaterMode, setIsTheaterMode] = useState(false);
   const playerTimeRef = useRef<number>(0);
-  const playerInstanceRef = useRef<any>(null);
+  const playerInstanceRef = useRef<MediaPlayerInstance | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState("aulas");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem(ACTIVE_TAB_KEY) || "aulas"; } catch { return "aulas"; }
+  });
   const [lessonSearch, setLessonSearch] = useState("");
   const [isSidebarHeaderOpen, setIsSidebarHeaderOpen] = useState(true);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
@@ -66,7 +65,7 @@ export default function CoursePage({}: Props) {
 
       setLessons(lessons);
     } catch {
-      console.log("Ocorreu um erro");
+      toast.error("Erro ao carregar aulas. Tente novamente.");
     } finally {
       if (!minimal) {
         setIsLoading(false);
@@ -98,23 +97,17 @@ export default function CoursePage({}: Props) {
     if (courseId) {
       getModuleLinks(apiUrl, Number(courseId)).then(setModuleLinks).catch(() => {});
     }
-  }, [courseId]);
+  }, [courseId, apiUrl]);
 
-  const currentIndex = useMemo(() => {
-    if (!selectedLesson) return -1;
-    return lessons.findIndex((l) => l.id === selectedLesson.id);
-  }, [lessons, selectedLesson]);
-
-  const hasPrevious = currentIndex > 0;
-  const hasNext = currentIndex >= 0 && currentIndex < lessons.length - 1;
-
-  const goToPrevious = () => {
-    if (hasPrevious) selectLesson(lessons[currentIndex - 1]);
-  };
-
-  const goToNext = () => {
-    if (hasNext) selectLesson(lessons[currentIndex + 1]);
-  };
+  // Auto-scroll para aula ativa ao carregar
+  useEffect(() => {
+    if (!selectedLesson || !sidebarRef.current) return;
+    const timer = setTimeout(() => {
+      const activeEl = sidebarRef.current?.querySelector('[data-active-lesson="true"]');
+      activeEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [selectedLesson?.id]);
 
   // Lista plana na ordem dos módulos (mesma ordem do sidebar)
   const lessonsInModuleOrder = useMemo(() => {
@@ -159,14 +152,15 @@ export default function CoursePage({}: Props) {
     });
   }, [apiUrl, courseId]);
 
+  const handleSidebarUpdate = useCallback(() => {
+    onFetch(true);
+    fetchCompletion(apiUrl, Number(courseId));
+  }, [apiUrl, courseId]);
+
   const handleSeek = useCallback((time: number) => {
     if (playerInstanceRef.current) {
       playerInstanceRef.current.currentTime = time;
     }
-  }, []);
-
-  const handleQuickNoteSaved = useCallback(() => {
-    setNoteRefreshTrigger((n) => n + 1);
   }, []);
 
   // Janela flutuante de anotações (window.open — coexiste com Video PiP)
@@ -286,6 +280,7 @@ export default function CoursePage({}: Props) {
 
   const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
+    try { localStorage.setItem(ACTIVE_TAB_KEY, value); } catch {}
     if (value === "aulas") {
       // Rolar até a aula ativa ao voltar para a aba Aulas
       requestAnimationFrame(() => {
@@ -298,6 +293,19 @@ export default function CoursePage({}: Props) {
       });
     }
   }, []);
+
+  // Ctrl+K para focar busca de aulas
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        handleTabChange("aulas");
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleTabChange]);
 
   const filteredModules = useMemo(() => {
     if (!lessonSearch.trim()) return modules;
@@ -331,11 +339,10 @@ export default function CoursePage({}: Props) {
   const scrollToContent = useCallback(() => {
     setActiveTab("aulas");
     setLessonSearch("");
-    if (isTheaterMode) setIsTheaterMode(false);
     requestAnimationFrame(() => {
       contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [isTheaterMode]);
+  }, []);
 
   if (!courseId) {
     return "Sem id de curso";
@@ -378,55 +385,18 @@ export default function CoursePage({}: Props) {
         })}
       </nav>
 
-      {isTheaterMode ? (
-        <>
-          <div ref={contentRef} className="-mx-6 bg-black">
-            <div>
-              <LessonViewer
-                lesson={selectedLesson}
-                nextLesson={nextLesson}
-                onNext={goToNext}
-                onPrevious={goToPrevious}
-                hasNext={hasNext}
-                hasPrevious={hasPrevious}
-                isTheaterMode={isTheaterMode}
-                onToggleTheaterMode={() => setIsTheaterMode(!isTheaterMode)}
-                playerTimeRef={playerTimeRef}
-                onPlayerReady={(p) => { playerInstanceRef.current = p; }}
-                siblingLessons={siblingLessons}
-                onSelectLesson={selectLesson}
-                onNoteSaved={handleQuickNoteSaved}
-                onOpenNotesPip={openNotesPip}
-                isNotesPipOpen={isNotesPipOpen}
-                onLessonCompleted={() => {
-                  onFetch(true);
-                  fetchCompletion(apiUrl, Number(courseId));
-                }}
-              />
-            </div>
-          </div>
-          <div className="pt-2">
-            <h3 className="text-left font-bold">{selectedLesson?.title}</h3>
-          </div>
-        </>
-      ) : isDesktop ? (
+      {isDesktop ? (
         <PanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged} className="gap-2">
           <Panel id="player" defaultSize="70%" minSize="50%">
-            <div ref={contentRef} className="w-full space-y-4 max-h-max bg-card rounded-md h-full">
+            <div ref={contentRef} className="w-full max-h-max bg-card rounded-md h-full">
               <LessonViewer
                 lesson={selectedLesson}
                 nextLesson={nextLesson}
-                onNext={goToNext}
-                onPrevious={goToPrevious}
-                hasNext={hasNext}
-                hasPrevious={hasPrevious}
-                isTheaterMode={isTheaterMode}
-                onToggleTheaterMode={() => setIsTheaterMode(!isTheaterMode)}
                 playerTimeRef={playerTimeRef}
                 onPlayerReady={(p) => { playerInstanceRef.current = p; }}
                 siblingLessons={siblingLessons}
+                allLessons={lessons}
                 onSelectLesson={selectLesson}
-                onNoteSaved={handleQuickNoteSaved}
                 onOpenNotesPip={openNotesPip}
                 isNotesPipOpen={isNotesPipOpen}
                 onLessonCompleted={() => {
@@ -434,212 +404,76 @@ export default function CoursePage({}: Props) {
                   fetchCompletion(apiUrl, Number(courseId));
                 }}
               />
-              <div className="p-4">
-                <h3 className="text-left font-bold">{selectedLesson?.title}</h3>
-              </div>
             </div>
           </Panel>
 
           <PanelResizeHandle className="resize-handle" />
 
           <Panel id="sidebar" defaultSize="30%" minSize="15%" maxSize="45%" collapsible collapsedSize="0%">
-            <div ref={sidebarRef} className="max-h-screen bg-card rounded-md border overflow-y-scroll h-full">
-              {/* Header colapsável */}
-              <button
-                onClick={() => setIsSidebarHeaderOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors"
-              >
-                <div className="text-left min-w-0 flex-1">
-                  <h3 className="font-semibold text-sm truncate">{selectedLesson?.course_title}</h3>
-                </div>
-                {isSidebarHeaderOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-                )}
-              </button>
-              {isSidebarHeaderOpen && (
-                <div className="px-4 pb-3">
-                  <CoursePercentage courseId={Number(courseId)} fromGlobal />
-                </div>
-              )}
-
-              {/* Tabs */}
-              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <div className="sticky top-0 z-10 bg-card border-y">
-                  <TabsList className="w-full grid grid-cols-2 mx-0 rounded-none h-10 bg-transparent">
-                    <TabsTrigger
-                      value="aulas"
-                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm"
-                    >
-                      Aulas
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="anotacoes"
-                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm"
-                    >
-                      Anotações
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent value="aulas" forceMount className="mt-0 data-[state=inactive]:hidden">
-                  <div className="px-3 py-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                      <Input
-                        placeholder="Buscar aula..."
-                        value={lessonSearch}
-                        onChange={(e) => setLessonSearch(e.target.value)}
-                        className="pl-8 h-8 text-sm"
-                      />
-                      {lessonSearch && (
-                        <button
-                          onClick={() => setLessonSearch("")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {!lessonSearch && <LastWatchedCard courseId={courseId} />}
-                  <ModuleList
-                    modules={filteredModules}
-                    onUpdate={() => {
-                      onFetch(true);
-                      fetchCompletion(apiUrl, Number(courseId));
-                    }}
-                    onBatchToggle={handleBatchToggle}
-                    courseId={courseId}
-                    moduleLinks={moduleLinks}
-                    onModuleLinksChange={setModuleLinks}
-                    apiUrl={apiUrl}
-                  />
-                </TabsContent>
-                <TabsContent value="anotacoes" forceMount className="mt-0 data-[state=inactive]:hidden">
-                  <NoteList
-                    lessonId={selectedLesson?.id ?? null}
-                    courseId={courseId}
-                    playerTimeRef={playerTimeRef}
-                    onSeek={handleSeek}
-                    onNavigateToLesson={handleNavigateToLesson}
-                    refreshTrigger={noteRefreshTrigger}
-                  />
-                </TabsContent>
-              </Tabs>
-            </div>
+            <CourseSidebar
+              sidebarRef={sidebarRef}
+              courseTitle={selectedLesson?.course_title}
+              courseId={courseId}
+              isSidebarHeaderOpen={isSidebarHeaderOpen}
+              onToggleSidebarHeader={() => setIsSidebarHeaderOpen((v) => !v)}
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              lessonSearch={lessonSearch}
+              onLessonSearchChange={setLessonSearch}
+              filteredModules={filteredModules}
+              onUpdate={handleSidebarUpdate}
+              onBatchToggle={handleBatchToggle}
+              moduleLinks={moduleLinks}
+              onModuleLinksChange={setModuleLinks}
+              apiUrl={apiUrl}
+              selectedLessonId={selectedLesson?.id ?? null}
+              playerTimeRef={playerTimeRef}
+              onSeek={handleSeek}
+              onNavigateToLesson={handleNavigateToLesson}
+              refreshTrigger={noteRefreshTrigger}
+            />
           </Panel>
         </PanelGroup>
       ) : (
         /* Mobile: layout empilhado sem resize */
         <div className="flex flex-col gap-2">
-          <div ref={contentRef} className="w-full space-y-4 max-h-max bg-card rounded-md">
+          <div ref={contentRef} className="w-full max-h-max bg-card rounded-md">
             <LessonViewer
               lesson={selectedLesson}
               nextLesson={nextLesson}
-              onNext={goToNext}
-              onPrevious={goToPrevious}
-              hasNext={hasNext}
-              hasPrevious={hasPrevious}
-              isTheaterMode={isTheaterMode}
-              onToggleTheaterMode={() => setIsTheaterMode(!isTheaterMode)}
               playerTimeRef={playerTimeRef}
               onPlayerReady={(p) => { playerInstanceRef.current = p; }}
               siblingLessons={siblingLessons}
+              allLessons={lessons}
               onSelectLesson={selectLesson}
               onLessonCompleted={() => {
                 onFetch(true);
                 fetchCompletion(apiUrl, Number(courseId));
               }}
             />
-            <div className="p-4">
-              <h3 className="text-left font-bold">{selectedLesson?.title}</h3>
-            </div>
           </div>
-          <div ref={sidebarRef} className="max-h-screen bg-card rounded-md border overflow-y-scroll w-full">
-            {/* Header colapsável */}
-            <button
-              onClick={() => setIsSidebarHeaderOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors"
-            >
-              <div className="text-left min-w-0 flex-1">
-                <h3 className="font-semibold text-sm truncate">{selectedLesson?.course_title}</h3>
-              </div>
-              {isSidebarHeaderOpen ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-              )}
-            </button>
-            {isSidebarHeaderOpen && (
-              <div className="px-4 pb-3">
-                <CoursePercentage courseId={Number(courseId)} fromGlobal />
-              </div>
-            )}
-
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <div className="sticky top-0 z-10 bg-card border-y">
-                <TabsList className="w-full grid grid-cols-2 mx-0 rounded-none h-10 bg-transparent">
-                  <TabsTrigger
-                    value="aulas"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm"
-                  >
-                    Aulas
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="anotacoes"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm"
-                  >
-                    Anotações
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-              <TabsContent value="aulas" forceMount className="mt-0 data-[state=inactive]:hidden">
-                <div className="px-3 py-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                    <Input
-                      placeholder="Buscar aula..."
-                      value={lessonSearch}
-                      onChange={(e) => setLessonSearch(e.target.value)}
-                      className="pl-8 h-8 text-sm"
-                    />
-                    {lessonSearch && (
-                      <button
-                        onClick={() => setLessonSearch("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {!lessonSearch && <LastWatchedCard courseId={courseId} />}
-                <ModuleList
-                  modules={filteredModules}
-                  onUpdate={() => {
-                    onFetch(true);
-                    fetchCompletion(apiUrl, Number(courseId));
-                  }}
-                  onBatchToggle={handleBatchToggle}
-                  courseId={courseId}
-                  moduleLinks={moduleLinks}
-                  onModuleLinksChange={setModuleLinks}
-                  apiUrl={apiUrl}
-                />
-              </TabsContent>
-              <TabsContent value="anotacoes" forceMount className="mt-0 data-[state=inactive]:hidden">
-                <NoteList
-                  lessonId={selectedLesson?.id ?? null}
-                  courseId={courseId}
-                  playerTimeRef={playerTimeRef}
-                  onSeek={handleSeek}
-                  onNavigateToLesson={handleNavigateToLesson}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
+          <CourseSidebar
+            sidebarRef={sidebarRef}
+            courseTitle={selectedLesson?.course_title}
+            courseId={courseId}
+            isSidebarHeaderOpen={isSidebarHeaderOpen}
+            onToggleSidebarHeader={() => setIsSidebarHeaderOpen((v) => !v)}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            lessonSearch={lessonSearch}
+            onLessonSearchChange={setLessonSearch}
+            filteredModules={filteredModules}
+            onUpdate={handleSidebarUpdate}
+            onBatchToggle={handleBatchToggle}
+            moduleLinks={moduleLinks}
+            onModuleLinksChange={setModuleLinks}
+            apiUrl={apiUrl}
+            selectedLessonId={selectedLesson?.id ?? null}
+            playerTimeRef={playerTimeRef}
+            onSeek={handleSeek}
+            onNavigateToLesson={handleNavigateToLesson}
+            className="w-full"
+          />
         </div>
       )}
 

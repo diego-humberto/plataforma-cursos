@@ -34,7 +34,6 @@ interface PlayerProps {
   timeElapsed: number;
   playerTimeRef?: React.RefObject<number>;
   onPlayerReady?: (player: MediaPlayerInstance) => void;
-  isTheaterMode?: boolean;
   subtitles?: SubtitleTrack[];
   onPipChange?: (isPip: boolean) => void;
 }
@@ -50,14 +49,13 @@ export function Player({
   timeElapsed,
   playerTimeRef,
   onPlayerReady,
-  isTheaterMode = false,
   subtitles = [],
   onPipChange,
 }: PlayerProps) {
-  const [lastElapsedTimeSaved, setLastElapsedTimeSaved] = useState(timeElapsed);
+  const lastElapsedTimeSavedRef = useRef(timeElapsed);
   const [isEndingTriggered, setIsEndingTriggered] = useState(false);
 
-  let player = useRef<MediaPlayerInstance>(null);
+  const player = useRef<MediaPlayerInstance>(null);
 
   const { apiUrl } = useApiUrl();
 
@@ -72,21 +70,21 @@ export function Player({
 
     const applyRate = () => {
       if (cancelled) return;
-      const video = document.querySelector('video');
-      if (video) video.playbackRate = savedRate;
-      if (player.current) player.current.playbackRate = savedRate;
+      if (player.current) {
+        player.current.playbackRate = savedRate;
+      }
     };
 
-    // Escuta canplay nativo (dispara a cada novo src carregado)
+    // Escuta canplay nativo via ref do player (evita querySelector frágil)
     // Debounce para aplicar após o último canplay (vidstack dispara múltiplos)
-    const video = document.querySelector('video');
     const handleCanPlay = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(applyRate, 200);
     };
 
-    if (video) {
-      video.addEventListener('canplay', handleCanPlay);
+    const playerEl = player.current;
+    if (playerEl) {
+      playerEl.addEventListener('can-play', handleCanPlay);
     }
 
     // Fallback caso eventos não disparem
@@ -95,7 +93,7 @@ export function Player({
     return () => {
       cancelled = true;
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (video) video.removeEventListener('canplay', handleCanPlay);
+      if (playerEl) playerEl.removeEventListener('can-play', handleCanPlay);
       clearTimeout(fallback);
     };
   }, [src]);
@@ -106,10 +104,6 @@ export function Player({
     }
   };
 
-  // Ref para acessar tempo salvo em callbacks de cleanup/beforeunload
-  const lastSavedRef = useRef(lastElapsedTimeSaved);
-  lastSavedRef.current = lastElapsedTimeSaved;
-
   useEffect(() => {
     if (player.current) {
       return player.current.subscribe(({ currentTime }) => {
@@ -117,19 +111,19 @@ export function Player({
           (playerTimeRef as React.MutableRefObject<number>).current = currentTime;
         }
         const currentSecondsElapsed = Math.floor(currentTime);
-        const lastedSavedSeconds = Math.floor(lastElapsedTimeSaved);
+        const lastSavedSeconds = Math.floor(lastElapsedTimeSavedRef.current);
         if (
           onTimeUpdate &&
-          currentSecondsElapsed % 5 == 0 &&
+          currentSecondsElapsed % 5 === 0 &&
           currentTime > 5 &&
-          currentSecondsElapsed != lastedSavedSeconds
+          currentSecondsElapsed !== lastSavedSeconds
         ) {
           onTimeUpdate(Math.floor(currentTime));
-          setLastElapsedTimeSaved(Math.floor(currentTime));
+          lastElapsedTimeSavedRef.current = Math.floor(currentTime);
         }
       });
     }
-  }, [lastElapsedTimeSaved]);
+  }, []);
 
   // Salvar tempo ao fechar aba/browser e ao trocar de aula
   useEffect(() => {
@@ -137,7 +131,7 @@ export function Player({
       const currentTime = playerTimeRef
         ? (playerTimeRef as React.MutableRefObject<number>).current
         : 0;
-      if (currentTime > 5 && Math.floor(currentTime) !== Math.floor(lastSavedRef.current)) {
+      if (currentTime > 5 && Math.floor(currentTime) !== Math.floor(lastElapsedTimeSavedRef.current)) {
         const payload = JSON.stringify({ time_elapsed: Math.floor(currentTime), lessonId });
         navigator.sendBeacon(
           `${apiUrl}/api/update-lesson-progress`,
@@ -196,9 +190,7 @@ export function Player({
   return (
     <>
       <MediaPlayer
-        className={`w-full aspect-video text-white font-sans overflow-hidden ring-media-focus data-[focus]:ring-4 ${
-          isTheaterMode ? 'max-h-[80vh] bg-black' : 'rounded-md bg-slate-900'
-        }`}
+        className="w-full aspect-video text-white font-sans overflow-hidden ring-media-focus data-[focus]:ring-4 rounded-md bg-slate-900"
         title={title}
         src={src}
         crossorigin

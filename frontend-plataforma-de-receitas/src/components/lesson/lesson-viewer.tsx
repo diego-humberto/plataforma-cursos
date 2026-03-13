@@ -3,10 +3,9 @@ import { Player } from "../player/player";
 import useApiUrl from "@/hooks/useApiUrl";
 import { updateWatchedTime } from "@/services/updateWatchedTime";
 import { Button } from "../ui/button";
-import { Check, ChevronLeft, ChevronRight, FileText, Maximize, Minimize, MonitorPlay, Pencil, Play, X } from "lucide-react";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Check, ChevronDown, ExternalLink, FileText, FolderOpen, MonitorPlay, Pencil, Play, X } from "lucide-react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import api from "@/lib/api";
-import { toast } from "sonner";
 
 const isDocumentFile = (url: string): boolean => {
   return (
@@ -67,17 +66,11 @@ const AUTOPLAY_KEY = "autoPlayNextLesson";
 type Props = {
   lesson: Lesson | null;
   nextLesson?: Lesson | null;
-  onNext?: () => void;
-  onPrevious?: () => void;
-  hasNext?: boolean;
-  hasPrevious?: boolean;
-  isTheaterMode?: boolean;
-  onToggleTheaterMode?: () => void;
   playerTimeRef?: React.RefObject<number>;
   onPlayerReady?: (player: any) => void;
   siblingLessons?: Lesson[];
+  allLessons?: Lesson[];
   onSelectLesson?: (lesson: Lesson) => void;
-  onNoteSaved?: () => void;
   onOpenNotesPip?: () => void;
   isNotesPipOpen?: boolean;
   onLessonCompleted?: () => void;
@@ -86,17 +79,11 @@ type Props = {
 export default function LessonViewer({
   lesson,
   nextLesson,
-  onNext,
-  onPrevious,
-  hasNext = false,
-  hasPrevious = false,
-  isTheaterMode = false,
-  onToggleTheaterMode,
   playerTimeRef,
   onPlayerReady,
   siblingLessons = [],
+  allLessons = [],
   onSelectLesson,
-  onNoteSaved,
   onOpenNotesPip,
   isNotesPipOpen = false,
   onLessonCompleted,
@@ -111,10 +98,26 @@ export default function LessonViewer({
   const [autoPlayNext, setAutoPlayNext] = useState(() =>
     localStorage.getItem(AUTOPLAY_KEY) !== "false"
   );
+  const [materiaisOpen, setMateriaisOpen] = useState(false);
   const { apiUrl } = useApiUrl();
   const isDocument = lesson
     ? isDocumentFile(lesson.pdf_url || lesson.video_url)
     : false;
+
+  // Documentos (PDF, HTML, TXT) da mesma aula para exibir abaixo do vídeo
+  // O módulo do vídeo é ex: "61. Aula 61..." e subpastas são "61. Aula 61.../html", "61. Aula 61.../material"
+  // Busca por módulos que começam com o módulo exato da aula + "/" (subpastas diretas)
+  const siblingDocuments = useMemo(() => {
+    if (!lesson?.module) return [];
+    const prefix = lesson.module + "/";
+    return (allLessons || []).filter((s) => {
+      if (s.id === lesson.id) return false;
+      // Mesma pasta ou subpasta direta da aula
+      if (s.module !== lesson.module && !s.module.startsWith(prefix)) return false;
+      const url = (s.pdf_url || s.video_url || "").toLowerCase();
+      return url.endsWith(".pdf") || url.endsWith(".html") || url.endsWith(".txt");
+    });
+  }, [lesson, allLessons]);
 
   const currentLessonIdRef = useRef<number | null>(null);
 
@@ -217,16 +220,6 @@ export default function LessonViewer({
     updateWatchedTime(apiUrl, lessonId, currentTime);
   };
 
-  const openInDefaultApp = async () => {
-    if (!lesson) return;
-    const filePath = lesson.pdf_url || lesson.video_url;
-    try {
-      await api.post(`${apiUrl}/api/open-file`, { path: filePath });
-    } catch {
-      toast.error("Erro ao abrir arquivo externamente.");
-    }
-  };
-
   if (!lesson) {
     return (
       <div className="flex-1 aspect-video bg-neutral-100 dark:bg-secondary rounded-md flex flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -239,7 +232,7 @@ export default function LessonViewer({
   return (
     <div className="flex-1">
       {isDocument ? (
-        <div className={`w-full bg-neutral-100 dark:bg-neutral-900 overflow-hidden ${isTheaterMode ? "" : "rounded-md"}`} style={{ height: "calc(100vh - 180px)" }}>
+        <div className="w-full bg-neutral-100 dark:bg-neutral-900 overflow-hidden rounded-md" style={{ height: "calc(100vh - 180px)" }}>
           <iframe
             className="w-full h-full border-0"
             src={`${apiUrl}${getResourcePath(lesson)}#zoom=100&view=FitH`}
@@ -256,7 +249,6 @@ export default function LessonViewer({
             timeElapsed={elapsedTime}
             playerTimeRef={playerTimeRef}
             onPlayerReady={onPlayerReady}
-            isTheaterMode={isTheaterMode}
             onPipChange={setIsPip}
             onLessonCompleted={onLessonCompleted}
             subtitles={
@@ -388,62 +380,84 @@ export default function LessonViewer({
         </div>
       )}
 
-      <div className="flex justify-between items-center px-4 py-2 border-t border-transparent">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasPrevious}
-            onClick={onPrevious}
-            className={!hasPrevious ? "opacity-40" : ""}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Anterior
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasNext}
-            onClick={onNext}
-            className={!hasNext ? "opacity-40" : ""}
-          >
-            Próxima
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+      {/* Info da aula + ações */}
+      <div className="px-4 pt-3 pb-2 space-y-2">
+        {/* Título + botões na mesma linha */}
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-left font-bold text-sm leading-snug flex-1 min-w-0 truncate">{lesson.title}</h3>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Materiais toggle */}
+            {siblingDocuments.length > 0 && (
+              <button
+                onClick={() => setMateriaisOpen((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-medium rounded-md border transition-all ${
+                  materiaisOpen
+                    ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
+                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Materiais</span>
+                <span className="inline-flex items-center justify-center h-[16px] min-w-[16px] px-1 rounded-full bg-purple-500/15 text-purple-400 text-[9px] font-bold">
+                  {siblingDocuments.length}
+                </span>
+                <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${materiaisOpen ? "rotate-180" : ""}`} />
+              </button>
+            )}
+
+            {/* Anotar */}
+            {!isDocument && onOpenNotesPip && (
+              <Button
+                variant={isNotesPipOpen ? "default" : "outline"}
+                size="sm"
+                onClick={onOpenNotesPip}
+                title="Abrir anotações em janela flutuante"
+                className="h-[30px] text-[12px]"
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Anotar
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex gap-1">
-          {!isDocument && onOpenNotesPip && (
-            <Button
-              variant={isNotesPipOpen ? "default" : "outline"}
-              size="sm"
-              onClick={onOpenNotesPip}
-              title="Abrir anotações em janela flutuante"
-            >
-              <Pencil className="h-4 w-4 mr-1" />
-              Anotar
-            </Button>
-          )}
-          {onToggleTheaterMode && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleTheaterMode}
-              title={isTheaterMode ? "Sair do modo teatro" : "Modo teatro"}
-            >
-              {isTheaterMode ? (
-                <>
-                  <Minimize className="h-4 w-4 mr-1" />
-                  Modo padrão
-                </>
-              ) : (
-                <>
-                  <Maximize className="h-4 w-4 mr-1" />
-                  Modo teatro
-                </>
-              )}
-            </Button>
-          )}
-        </div>
+
+        {/* Materiais collapsible */}
+        {siblingDocuments.length > 0 && (
+          <div
+            className={`overflow-hidden transition-all duration-300 ${
+              materiaisOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="p-1">
+                {siblingDocuments.map((doc, i) => {
+                  const ext = getFileExt(doc).toUpperCase();
+                  return (
+                    <div key={doc.id}>
+                      {i > 0 && <div className="mx-3 border-t border-border/50" />}
+                      <button
+                        onClick={() => onSelectLesson?.(doc)}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-accent group"
+                      >
+                        <code className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${
+                          ext === "PDF"
+                            ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                            : ext === "HTML"
+                              ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                              : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700"
+                        }`}>
+                          {ext}
+                        </code>
+                        <span className="flex-1 truncate text-xs font-medium">{doc.title}</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
