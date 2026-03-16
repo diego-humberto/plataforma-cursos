@@ -53,6 +53,7 @@ export type CycleSubject = {
   name: string;
   emphasis: number;
   color: string;
+  allocatedMinutes: number;
 };
 
 export type TimerType = "pomodoro" | "continuous";

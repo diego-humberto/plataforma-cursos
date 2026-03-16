@@ -41,16 +41,11 @@ function getTodayStr(): string {
 
 function calcAllocations(
   subjects: CycleSubject[],
-  dailyHours: DailyHoursConfig
+  _dailyHours: DailyHoursConfig
 ): SubjectProgress[] {
-  const dayKey = getTodayKey();
-  const hoursToday = dailyHours[dayKey];
-  const totalEmphasis = subjects.reduce((sum, s) => sum + s.emphasis, 0);
-  if (totalEmphasis === 0) return [];
-
   return subjects.map((s) => ({
     subjectId: s.id,
-    allocatedMinutes: Math.round((hoursToday * 60 * s.emphasis) / totalEmphasis),
+    allocatedMinutes: s.allocatedMinutes,
     completedMs: 0,
     pomodorosCompleted: 0,
   }));
@@ -93,9 +88,9 @@ interface FocusStore {
   saveAndStopTimer: () => void;
 
   // Subject actions
-  addSubject: (name: string, emphasis: number) => void;
+  addSubject: (name: string, emphasis: number, allocatedMinutes?: number) => void;
   removeSubject: (id: string) => void;
-  updateSubject: (id: string, updates: Partial<Pick<CycleSubject, "name" | "emphasis" | "color">>) => void;
+  updateSubject: (id: string, updates: Partial<Pick<CycleSubject, "name" | "emphasis" | "color" | "allocatedMinutes">>) => void;
   moveSubject: (index: number, direction: "up" | "down") => void;
   switchToSubject: (index: number) => void;
 
@@ -435,7 +430,7 @@ const useFocusTimer = create<FocusStore>()(
         });
       },
 
-      addSubject: (name, emphasis) => {
+      addSubject: (name, emphasis, allocatedMinutes = 60) => {
         const { cycleConfig } = get();
         const usedColors = cycleConfig.subjects.map((s) => s.color);
         const nextColor = SUBJECT_COLORS.find((c) => !usedColors.includes(c)) || SUBJECT_COLORS[0];
@@ -445,6 +440,7 @@ const useFocusTimer = create<FocusStore>()(
           name,
           emphasis,
           color: nextColor,
+          allocatedMinutes,
         };
 
         const newSubjects = [...cycleConfig.subjects, newSubject];
@@ -606,7 +602,7 @@ const useFocusTimer = create<FocusStore>()(
     }),
     {
       name: "focus-timer-store",
-      version: 4,
+      version: 5,
       migrate: (persisted: any, version: number) => {
         const state = persisted as any;
         if (version < 2) {
@@ -630,6 +626,22 @@ const useFocusTimer = create<FocusStore>()(
           // Add completedCycles to cycle state
           if (state?.cycle && state.cycle.completedCycles === undefined) {
             state.cycle.completedCycles = 0;
+          }
+        }
+        if (version < 5) {
+          // Add allocatedMinutes to existing subjects using proportional formula
+          if (state?.cycleConfig?.subjects) {
+            const subjects = state.cycleConfig.subjects;
+            const totalEmphasis = subjects.reduce((sum: number, s: any) => sum + (s.emphasis || 5), 0);
+            const dayKey = WEEKDAY_KEYS[new Date().getDay()];
+            const hoursToday = state?.cycleConfig?.dailyHours?.[dayKey] ?? 8;
+            const totalMinutes = hoursToday * 60;
+            state.cycleConfig.subjects = subjects.map((s: any) => ({
+              ...s,
+              allocatedMinutes: s.allocatedMinutes ?? (totalEmphasis > 0
+                ? Math.round((totalMinutes * (s.emphasis || 5)) / totalEmphasis)
+                : 60),
+            }));
           }
         }
         return persisted;

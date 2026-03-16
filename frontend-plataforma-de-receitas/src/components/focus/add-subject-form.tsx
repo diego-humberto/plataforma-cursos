@@ -7,15 +7,17 @@ import useFocusTimer from "@/hooks/useFocusTimer";
 export function AddSubjectForm() {
   const [name, setName] = useState("");
   const [emphasis, setEmphasis] = useState("5");
+  const [minutes, setMinutes] = useState("60");
   const addSubject = useFocusTimer((s) => s.addSubject);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    addSubject(trimmed, parseInt(emphasis) || 5);
+    addSubject(trimmed, parseInt(emphasis) || 5, parseInt(minutes) || 60);
     setName("");
     setEmphasis("5");
+    setMinutes("60");
   };
 
   return (
@@ -37,6 +39,17 @@ export function AddSubjectForm() {
           max="10"
           value={emphasis}
           onChange={(e) => setEmphasis(e.target.value)}
+          className="text-center"
+        />
+      </div>
+      <div className="w-24">
+        <label className="text-xs text-muted-foreground mb-1 block">Minutos</label>
+        <Input
+          type="number"
+          step="5"
+          min="5"
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value)}
           className="text-center"
         />
       </div>

@@ -16,8 +16,11 @@ export function SubjectList() {
   const removeSubject = useFocusTimer((s) => s.removeSubject);
   const moveSubject = useFocusTimer((s) => s.moveSubject);
   const status = useFocusTimer((s) => s.timer.status);
+  const todayHours = useFocusTimer((s) => s.getTodayHours());
 
-  const totalEmphasis = subjects.reduce((sum, s) => sum + s.emphasis, 0);
+  const totalAllocated = subjects.reduce((sum, s) => sum + s.allocatedMinutes, 0);
+  const totalAvailable = todayHours * 60;
+  const isOver = totalAllocated > totalAvailable;
 
   return (
     <div className="space-y-4">
@@ -30,9 +33,8 @@ export function SubjectList() {
             </TooltipTrigger>
             <TooltipContent side="right" className="max-w-xs">
               <p className="text-xs">
-                A <strong>ênfase</strong> define o peso relativo de cada matéria (escala 1-10).
-                Matérias com ênfase maior recebem mais tempo proporcionalmente.
-                Ex: ênfase 8 recebe o dobro de tempo que ênfase 4.
+                Defina a <strong>ênfase</strong> (1-10) e os <strong>minutos</strong> de cada matéria manualmente.
+                A ênfase define a prioridade relativa. Os minutos definem o tempo alocado no dia.
               </p>
             </TooltipContent>
           </Tooltip>
@@ -47,7 +49,6 @@ export function SubjectList() {
 
       <div className="space-y-2">
         {subjects.map((subject, index) => {
-          const pct = totalEmphasis > 0 ? Math.round((subject.emphasis / totalEmphasis) * 100) : 0;
           return (
             <div key={subject.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
               {status === "idle" && subjects.length > 1 && (
@@ -97,7 +98,18 @@ export function SubjectList() {
                   className="w-16 text-center"
                   disabled={status !== "idle"}
                 />
-                <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{pct}%</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">Min</label>
+                <Input
+                  type="number"
+                  step="5"
+                  min="5"
+                  value={subject.allocatedMinutes}
+                  onChange={(e) => updateSubject(subject.id, { allocatedMinutes: parseInt(e.target.value) || 60 })}
+                  className="w-20 text-center"
+                  disabled={status !== "idle"}
+                />
               </div>
               <Button
                 variant="ghost"
@@ -116,9 +128,14 @@ export function SubjectList() {
       {status === "idle" && <AddSubjectForm />}
 
       {subjects.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Ênfase de 1 (menor prioridade) a 10 (maior prioridade). O tempo é distribuído proporcionalmente entre as matérias.
-        </p>
+        <div className="flex items-center justify-between text-sm">
+          <p className="text-xs text-muted-foreground">
+            Defina a ênfase (prioridade) e os minutos de cada matéria manualmente.
+          </p>
+          <span className={`font-semibold tabular-nums ${isOver ? "text-destructive" : "text-emerald-500"}`}>
+            {totalAllocated}min / {totalAvailable}min
+          </span>
+        </div>
       )}
     </div>
   );

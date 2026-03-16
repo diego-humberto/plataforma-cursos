@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Check, ChevronDown, ExternalLink, FileText, FolderOpen, MonitorPlay, Pencil, Play, X } from "lucide-react";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import api from "@/lib/api";
+import FloatingPdfViewer from "./floating-pdf-viewer";
 
 const isDocumentFile = (url: string): boolean => {
   return (
@@ -99,6 +100,7 @@ export default function LessonViewer({
     localStorage.getItem(AUTOPLAY_KEY) !== "false"
   );
   const [materiaisOpen, setMateriaisOpen] = useState(false);
+  const [floatingPdf, setFloatingPdf] = useState<{ src: string; title: string } | null>(null);
   const { apiUrl } = useApiUrl();
   const isDocument = lesson
     ? isDocumentFile(lesson.pdf_url || lesson.video_url)
@@ -135,10 +137,11 @@ export default function LessonViewer({
   })();
   const overlayLesson = nextSibling || nextLesson;
 
-  // Limpar overlay ao trocar de aula
+  // Limpar overlay e floating PDF ao trocar de aula
   useEffect(() => {
     setShowNextOverlay(false);
     setCountdown(NEXT_LESSON_COUNTDOWN);
+    setFloatingPdf(null);
     if (countdownRef.current) clearInterval(countdownRef.current);
   }, [lesson?.id]);
 
@@ -270,6 +273,15 @@ export default function LessonViewer({
                 </Button>
               )}
             </div>
+          )}
+
+          {/* Floating PDF viewer */}
+          {floatingPdf && (
+            <FloatingPdfViewer
+              src={floatingPdf.src}
+              title={floatingPdf.title}
+              onClose={() => setFloatingPdf(null)}
+            />
           )}
 
           {/* Overlay: próxima aula */}
@@ -436,7 +448,20 @@ export default function LessonViewer({
                     <div key={doc.id}>
                       {i > 0 && <div className="mx-3 border-t border-border/50" />}
                       <button
-                        onClick={() => onSelectLesson?.(doc)}
+                        onClick={() => {
+                          // Se a aula atual é vídeo, abre PDF flutuante
+                          if (!isDocument) {
+                            const docUrl = doc.pdf_url || doc.video_url || "";
+                            setFloatingPdf({
+                              src: `${apiUrl}/serve-content?path=${encodeURIComponent(docUrl)}`,
+                              title: doc.title,
+                            });
+                            setMateriaisOpen(false);
+                          } else {
+                            // Se não tem vídeo, navega normalmente
+                            onSelectLesson?.(doc);
+                          }
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-accent group"
                       >
                         <code className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${
