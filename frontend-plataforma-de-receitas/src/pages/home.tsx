@@ -14,11 +14,14 @@ import useApiUrl from "@/hooks/useApiUrl";
 import useScanProgress from "@/hooks/useScanProgress";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { BookOpenCheck, FileText, FolderSync, Search, Timer } from "lucide-react";
+import { BookOpenCheck, FileText, FolderSync, Play, Search, Timer } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
 import StudyHeatmap from "@/components/study-heatmap";
 import { DailyReadingsDrawer } from "@/components/daily-readings-drawer";
+import { getLastViewedLesson } from "@/utils/utils";
+import { Lesson } from "@/models/models";
+import { formatDuration } from "@/utils/format-duration";
 
 export default function HomeScreen() {
   const [courses, setCourses] = useState<Course[] | null>(null);
@@ -76,6 +79,18 @@ export default function HomeScreen() {
       toast.error("Erro ao iniciar reescaneamento.");
     }
   };
+
+  // Encontra a última aula assistida globalmente (entre todos os cursos)
+  const lastWatched = useMemo(() => {
+    if (!courses) return null;
+    for (const course of courses) {
+      const lesson = getLastViewedLesson(String(course.id));
+      if (lesson) {
+        return { course, lesson };
+      }
+    }
+    return null;
+  }, [courses]);
 
   const filteredCourses = useMemo(() => {
     if (!courses) return null;
@@ -174,56 +189,99 @@ export default function HomeScreen() {
         </div>
       ))}
 
-      {/* Acesso rápido */}
-      <div className="mt-6 flex flex-wrap gap-3">
-        {/* Botão Anki */}
-        <button
-          onClick={async () => {
-            try {
-              const res = await fetch(`${apiUrl}/api/open-app`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ app: "anki" }),
-              });
-              const data = await res.json();
-              if (!res.ok) toast.error(data.error || "Erro ao abrir Anki.");
-            } catch {
-              toast.error("Erro ao conectar com a API.");
+      {/* Acesso rápido + Continuar assistindo */}
+      <div className="mt-6 flex items-stretch gap-3">
+        {/* Atalhos */}
+        <div className="flex flex-wrap gap-3">
+          {/* Botão Anki */}
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch(`${apiUrl}/api/open-app`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ app: "anki" }),
+                });
+                const data = await res.json();
+                if (!res.ok) toast.error(data.error || "Erro ao abrir Anki.");
+              } catch {
+                toast.error("Erro ao conectar com a API.");
+              }
+            }}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <BookOpenCheck className="h-5 w-5 text-blue-500 shrink-0" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Abrir Anki</p>
+              <p className="text-xs text-muted-foreground">Revisão espaçada</p>
+            </div>
+          </button>
+
+          {/* Ciclo de Estudos */}
+          <button
+            onClick={() => navigate("/foco")}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <Timer className="h-5 w-5 text-purple-500 shrink-0" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Ciclo de Estudos</p>
+              <p className="text-xs text-muted-foreground">Timer Pomodoro</p>
+            </div>
+          </button>
+
+          {/* Leituras */}
+          <DailyReadingsDrawer
+            customTrigger={
+              <button className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
+                <FileText className="h-5 w-5 text-orange-500 shrink-0" />
+                <div className="text-left">
+                  <p className="text-sm font-medium">Leituras</p>
+                  <p className="text-xs text-muted-foreground">PDFs diários</p>
+                </div>
+              </button>
             }
-          }}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-        >
-          <BookOpenCheck className="h-5 w-5 text-blue-500 shrink-0" />
-          <div className="text-left">
-            <p className="text-sm font-medium">Abrir Anki</p>
-            <p className="text-xs text-muted-foreground">Revisão espaçada</p>
-          </div>
-        </button>
+          />
+        </div>
 
-        {/* Ciclo de Estudos */}
-        <button
-          onClick={() => navigate("/foco")}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-        >
-          <Timer className="h-5 w-5 text-purple-500 shrink-0" />
-          <div className="text-left">
-            <p className="text-sm font-medium">Ciclo de Estudos</p>
-            <p className="text-xs text-muted-foreground">Timer Pomodoro</p>
-          </div>
-        </button>
-
-        {/* Leituras */}
-        <DailyReadingsDrawer
-          customTrigger={
-            <button className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
-              <FileText className="h-5 w-5 text-orange-500 shrink-0" />
+        {/* Continuar de onde parou */}
+        {lastWatched && (() => {
+          const { course, lesson } = lastWatched;
+          const ext = (lesson.video_url || lesson.pdf_url || "").split(".").pop()?.toLowerCase() || "";
+          const isVideo = ["mp4", "avi", "mov", "wmv", "flv", "mkv", "webm"].includes(ext);
+          return (
+            <button
+              onClick={() => navigate(`/cursos/${course.id}`)}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg border border-purple-200 dark:border-purple-500/20 bg-purple-50/50 dark:bg-purple-500/5 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-purple-500/10 shrink-0 group-hover:bg-purple-500/20 transition-colors">
+                <Play className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 fill-current" />
+              </div>
               <div className="text-left">
-                <p className="text-sm font-medium">Leituras</p>
-                <p className="text-xs text-muted-foreground">PDFs diários</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-0.5">
+                  Continuar de onde parou
+                </p>
+                <p className="text-sm font-medium truncate max-w-[260px]">{lesson.title}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-muted-foreground">{course.name}</span>
+                  {ext && (
+                    <code className={`px-1 py-0 rounded text-[9px] uppercase font-semibold border ${
+                      isVideo
+                        ? "bg-blue-500/10 text-blue-700 border-blue-200 dark:border-blue-900 dark:text-blue-400"
+                        : "bg-red-500/10 text-red-700 border-red-200 dark:border-red-900 dark:text-red-400"
+                    }`}>
+                      {ext}
+                    </code>
+                  )}
+                  {lesson.duration && lesson.duration !== "0" && (
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {formatDuration(Number(lesson.duration))}
+                    </span>
+                  )}
+                </div>
               </div>
             </button>
-          }
-        />
+          );
+        })()}
       </div>
 
       {/* Heatmap de Estudos */}
