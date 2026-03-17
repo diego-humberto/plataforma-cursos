@@ -8,6 +8,7 @@ import { getLessons } from "@/services/getLessons";
 import { getModuleLinks, type ModuleLinks } from "@/services/moduleLinks";
 import api from "@/lib/api";
 import { sortLessons } from "@/utils/sort-lessons";
+import { setLastViewedLesson } from "@/utils/utils";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ChevronRight, Home } from "lucide-react";
@@ -108,6 +109,13 @@ export default function CoursePage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [selectedLesson?.id]);
+
+  // Atualizar "última aula assistida" sempre que trocar de aula
+  useEffect(() => {
+    if (selectedLesson && courseId) {
+      setLastViewedLesson(courseId, selectedLesson);
+    }
+  }, [selectedLesson?.id, courseId]);
 
   // Lista plana na ordem dos módulos (mesma ordem do sidebar)
   const lessonsInModuleOrder = useMemo(() => {

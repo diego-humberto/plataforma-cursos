@@ -10,7 +10,6 @@ import useSelectedLesson from "@/hooks/useSelectedLesson";
 
 import {
   calculateCompletionPercentage,
-  setLastViewedLesson,
 } from "@/utils/utils";
 
 import { toast } from "sonner";
@@ -379,7 +378,6 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
           index={index}
           onSelect={() => {
             selectLesson(lesson);
-            setLastViewedLesson(courseId, lesson);
           }}
           selectedLessonId={selectedLesson?.id}
           onComplete={handleCompleteLesson}

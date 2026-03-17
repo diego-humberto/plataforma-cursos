@@ -18,8 +18,8 @@ export default function LastWatchedCard({ courseId }: Props) {
   useEffect(() => {
     const lastWatched = getLastViewedLesson(courseId);
 
-    if (lastWatched?.id != selectedLesson?.id && lastWatched != null) {
-      setLesson(lastWatched);
+    if (lastWatched?.lesson.id != selectedLesson?.id && lastWatched != null) {
+      setLesson(lastWatched.lesson);
     }
   }, []);
 

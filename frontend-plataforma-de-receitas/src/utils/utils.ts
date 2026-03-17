@@ -55,12 +55,18 @@ export function calculateCourseProgress(lessons: Lesson[]) {
   return (completed.length / lessons.length) * 100;
 }
 
-export function getLastViewedLesson(courseId: string) {
+export function getLastViewedLesson(courseId: string): { lesson: Lesson; viewedAt: number } | null {
   const lastViewed = localStorage.getItem(courseId);
 
   if (lastViewed) {
     try {
-      return JSON.parse(lastViewed) as Lesson;
+      const parsed = JSON.parse(lastViewed);
+      // Support both old format (plain Lesson) and new format ({ lesson, viewedAt })
+      if (parsed.viewedAt && parsed.lesson) {
+        return parsed as { lesson: Lesson; viewedAt: number };
+      }
+      // Old format: treat as viewed long ago
+      return { lesson: parsed as Lesson, viewedAt: 0 };
     } catch {
       return null;
     }
@@ -70,5 +76,5 @@ export function getLastViewedLesson(courseId: string) {
 }
 
 export function setLastViewedLesson(courseId: string, lesson: Lesson) {
-  localStorage.setItem(courseId, JSON.stringify(lesson));
+  localStorage.setItem(courseId, JSON.stringify({ lesson, viewedAt: Date.now() }));
 }

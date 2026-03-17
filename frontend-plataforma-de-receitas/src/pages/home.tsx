@@ -80,16 +80,17 @@ export default function HomeScreen() {
     }
   };
 
-  // Encontra a última aula assistida globalmente (entre todos os cursos)
+  // Encontra a última aula assistida globalmente (a mais recente entre todos os cursos)
   const lastWatched = useMemo(() => {
     if (!courses) return null;
+    let best: { course: typeof courses[0]; lesson: Lesson; viewedAt: number } | null = null;
     for (const course of courses) {
-      const lesson = getLastViewedLesson(String(course.id));
-      if (lesson) {
-        return { course, lesson };
+      const data = getLastViewedLesson(String(course.id));
+      if (data && (!best || data.viewedAt > best.viewedAt)) {
+        best = { course, lesson: data.lesson, viewedAt: data.viewedAt };
       }
     }
-    return null;
+    return best ? { course: best.course, lesson: best.lesson } : null;
   }, [courses]);
 
   const filteredCourses = useMemo(() => {
