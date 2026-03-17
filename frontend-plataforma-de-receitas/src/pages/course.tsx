@@ -112,10 +112,14 @@ export default function CoursePage() {
 
   // Atualizar "última aula assistida" sempre que trocar de aula
   useEffect(() => {
-    if (selectedLesson && courseId) {
-      setLastViewedLesson(courseId, selectedLesson);
+    if (selectedLesson && courseId && lessons.length > 0) {
+      // Só salvar se a lesson pertence a este curso (evita contaminar o localStorage ao trocar de curso)
+      const belongsToCourse = lessons.some(l => l.id === selectedLesson.id);
+      if (belongsToCourse) {
+        setLastViewedLesson(courseId, selectedLesson);
+      }
     }
-  }, [selectedLesson?.id, courseId]);
+  }, [selectedLesson?.id, courseId, lessons]);
 
   // Lista plana na ordem dos módulos (mesma ordem do sidebar)
   const lessonsInModuleOrder = useMemo(() => {
