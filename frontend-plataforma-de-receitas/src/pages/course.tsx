@@ -103,11 +103,13 @@ export default function CoursePage() {
   // Auto-scroll para aula ativa ao carregar
   useEffect(() => {
     if (!selectedLesson || !sidebarRef.current) return;
-    const timer = setTimeout(() => {
+    const scrollToActive = () => {
       const activeEl = sidebarRef.current?.querySelector('[data-active-lesson="true"]');
       activeEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 300);
-    return () => clearTimeout(timer);
+    };
+    const t1 = setTimeout(scrollToActive, 300);
+    const t2 = setTimeout(scrollToActive, 700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [selectedLesson?.id]);
 
   // Atualizar "última aula assistida" sempre que trocar de aula
@@ -294,15 +296,15 @@ export default function CoursePage() {
     setActiveTab(value);
     try { localStorage.setItem(ACTIVE_TAB_KEY, value); } catch {}
     if (value === "aulas") {
-      // Rolar até a aula ativa ao voltar para a aba Aulas
-      requestAnimationFrame(() => {
+      // Aguardar render completo da aba + accordions antes de scrollar
+      setTimeout(() => {
         const activeEl = sidebarRef.current?.querySelector('[data-active-lesson="true"]');
         if (activeEl) {
-          activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          activeEl.scrollIntoView({ behavior: "instant", block: "center" });
         } else if (sidebarRef.current) {
           sidebarRef.current.scrollTop = 0;
         }
-      });
+      }, 350);
     }
   }, []);
 
