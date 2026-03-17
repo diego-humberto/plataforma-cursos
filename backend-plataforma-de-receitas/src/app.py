@@ -92,7 +92,8 @@ class ModuleLink(db.Model):
     questions_url = db.Column(db.Text, nullable=False)
     course = db.relationship('Course', backref=db.backref('module_links', lazy=True))
 
-from routes import *
+from routes import register_blueprints
+register_blueprints(app)
 
 with app.app_context():
     db.create_all()
