@@ -1,7 +1,12 @@
+import sys
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from config import Config
+
+# Quando rodado como 'python app.py', o módulo é __main__.
+# Registrar também como 'app' para que os blueprints consigam fazer 'from app import ...'.
+sys.modules.setdefault('app', sys.modules[__name__])
 
 app = Flask(__name__, static_folder='../../frontend-plataforma-de-receitas/dist', static_url_path='')
 app.config.from_object(Config)
