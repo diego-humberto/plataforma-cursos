@@ -14,6 +14,20 @@ app.config.from_object(Config)
 db = SQLAlchemy(app)
 CORS(app)
 
+# WAL permite leituras concorrentes durante escrita (scan em background)
+# e busy_timeout faz escritas concorrentes esperarem em vez de falhar
+# com "database is locked".
+from sqlalchemy import event
+
+with app.app_context():
+    @event.listens_for(db.engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
 class Course(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)

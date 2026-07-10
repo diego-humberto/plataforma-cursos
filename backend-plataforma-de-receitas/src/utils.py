@@ -11,6 +11,11 @@ SUBTITLE_EXTENSIONS = (".srt", ".vtt")
 # Progresso de escaneamento por course_id
 scan_progress = {}
 
+# Commits em lote durante o scan: mantém transações curtas para não segurar
+# o lock de escrita do SQLite (outras requisições escrevem entre os lotes)
+# e torna as aulas novas visíveis progressivamente no frontend.
+SCAN_COMMIT_BATCH = 20
+
 # Lock por course_id para impedir rescans simultâneos
 _scan_locks = {}
 _locks_lock = threading.Lock()
@@ -138,6 +143,12 @@ def _merge_lessons_in_directory(directory, course_id, hierarchy_prefix, existing
                 lesson.hierarchy_path = hierarchy_prefix
                 lesson.is_active = 1  # Reativar se estava desativada
                 lesson.subtitle_urls = subtitle_json
+                # Duração ficou 0 no scan anterior (ex.: arquivo ainda sendo
+                # copiado para o disco) — tentar de novo agora
+                if not is_document and lesson.duration in (None, '', '0'):
+                    duration = get_video_duration_v1(file_path)
+                    if duration:
+                        lesson.duration = str(duration)
             else:
                 # Nova lição: tentar copiar progresso de outro curso com mesmo arquivo
                 video_url = "" if is_pdf else file_path
@@ -155,12 +166,12 @@ def _merge_lessons_in_directory(directory, course_id, hierarchy_prefix, existing
                     progressStatus = donor.progressStatus
                     isCompleted = donor.isCompleted
                     time_elapsed = donor.time_elapsed
-                    duration = donor.duration or str(get_video_duration_v1(file_path))
+                    duration = donor.duration or ('0' if is_document else str(get_video_duration_v1(file_path)))
                 else:
                     progressStatus = 'not_started'
                     isCompleted = 0
                     time_elapsed = '0'
-                    duration = str(get_video_duration_v1(file_path))
+                    duration = '0' if is_document else str(get_video_duration_v1(file_path))
 
                 lesson = Lesson(
                     course_id=course_id,
@@ -192,6 +203,10 @@ def _merge_lessons_in_directory(directory, course_id, hierarchy_prefix, existing
 
             if course_id in scan_progress:
                 scan_progress[course_id]["processed"] += 1
+                # Commit em lote: libera o lock de escrita para outras requisições
+                # e torna as aulas visíveis antes do fim do scan
+                if scan_progress[course_id]["processed"] % SCAN_COMMIT_BATCH == 0:
+                    db.session.commit()
 
 
 def scan_data_directory_and_register_courses(scan_path):
