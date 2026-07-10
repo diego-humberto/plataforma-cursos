@@ -5,7 +5,7 @@ import json
 import threading
 from datetime import datetime
 
-from app import db, Course, Lesson, Note
+from app import db, Course, Lesson, Note, ModuleLink
 from utils import list_and_register_lessons, scan_data_directory_and_register_courses, scan_progress, get_scan_lock
 
 bp = Blueprint('courses', __name__)
@@ -317,6 +317,10 @@ def delete_course(course_id):
             Note.query.filter(Note.lesson_id.in_(lesson_ids)).delete(synchronize_session=False)
 
     Lesson.query.filter_by(course_id=course_id).delete()
+
+    # Deletar links de questões dos módulos (senão o SQLAlchemy tenta
+    # setar course_id=NULL e viola a constraint NOT NULL)
+    ModuleLink.query.filter_by(course_id=course_id).delete(synchronize_session=False)
 
     if course.fileCover:
         try:
