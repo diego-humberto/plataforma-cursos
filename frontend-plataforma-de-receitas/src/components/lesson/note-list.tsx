@@ -3,7 +3,7 @@ import useApiUrl from "@/hooks/useApiUrl";
 import { useEffect, useRef, useState, memo } from "react";
 import { Button } from "../ui/button";
 import TiptapEditor from "../ui/tiptap-editor";
-import { BookOpen, Clock, Download, Loader2, MessageSquareText, Pencil, StickyNote, Trash2 } from "lucide-react";
+import { BookOpen, Clock, Copy, Download, Loader2, MessageSquareText, Pencil, StickyNote, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getNotes, createNote, updateNote, deleteNote, exportLessonNotesPdf, exportCourseNotesPdf } from "@/services/notes";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
@@ -56,6 +56,30 @@ function buildAnnotatedTree(lessons: AnnotatedLesson[]) {
 }
 
 const HTML_TAG_REGEX = /<[a-z][\s\S]*?>/i;
+
+function htmlToPlainText(html: string): string {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.innerText.trim();
+}
+
+/** Copia com formatação rica (text/html) quando suportado, senão texto puro. */
+async function copyToClipboard(html: string, plain: string) {
+  if (navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+        }),
+      ]);
+      return;
+    } catch {
+      // fallback para texto puro abaixo
+    }
+  }
+  await navigator.clipboard.writeText(plain);
+}
 
 function NoteContent({ content }: { content: string }) {
   if (HTML_TAG_REGEX.test(content)) {
@@ -197,6 +221,36 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
     }
   };
 
+  const handleCopyNote = async (note: Note) => {
+    const isHtml = HTML_TAG_REGEX.test(note.content);
+    const plain = isHtml ? htmlToPlainText(note.content) : note.content;
+    try {
+      await copyToClipboard(isHtml ? note.content : `<p>${note.content}</p>`, plain);
+      toast.success("Anotação copiada!");
+    } catch {
+      toast.error("Erro ao copiar anotação.");
+    }
+  };
+
+  const handleCopyAllNotes = async () => {
+    if (notes.length === 0) return;
+    const htmlParts: string[] = [];
+    const plainParts: string[] = [];
+    for (const note of notes) {
+      const ts = formatTimestamp(note.timestamp);
+      const isHtml = HTML_TAG_REGEX.test(note.content);
+      const plain = isHtml ? htmlToPlainText(note.content) : note.content;
+      htmlParts.push(`<p><strong>[${ts}]</strong></p>${isHtml ? note.content : `<p>${note.content}</p>`}`);
+      plainParts.push(`[${ts}]\n${plain}`);
+    }
+    try {
+      await copyToClipboard(htmlParts.join("<br>"), plainParts.join("\n\n"));
+      toast.success(`${notes.length} anotações copiadas!`);
+    } catch {
+      toast.error("Erro ao copiar anotações.");
+    }
+  };
+
   const handleExportLesson = async () => {
     if (!lessonId) return;
     try {
@@ -297,6 +351,19 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
                       size="icon"
                       variant="ghost"
                       className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={handleCopyAllNotes}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copiar todas as anotações desta aula</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
                       onClick={handleExportLesson}
                     >
                       <Download className="h-3.5 w-3.5" />
@@ -327,6 +394,16 @@ export default memo(function NoteList({ lessonId, courseId, playerTimeRef, onSee
                       size="icon"
                       variant="ghost"
                       className="h-6 w-6"
+                      title="Copiar anotação"
+                      onClick={() => handleCopyNote(note)}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Editar anotação"
                       onClick={() => {
                         setEditingId(note.id);
                         setEditContent(note.content);
