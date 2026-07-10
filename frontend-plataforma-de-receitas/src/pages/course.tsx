@@ -11,7 +11,8 @@ import { sortLessons } from "@/utils/sort-lessons";
 import { setLastViewedLesson } from "@/utils/utils";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronRight, Home } from "lucide-react";
+import { ChevronRight, Home, Loader2 } from "lucide-react";
+import useScanProgress from "@/hooks/useScanProgress";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, useDefaultLayout } from "react-resizable-panels";
 import LessonSkeleton from "@/components/lesson/lesson-skeleton";
 import { toast } from "sonner";
@@ -53,6 +54,50 @@ export default function CoursePage() {
   const { apiUrl } = useApiUrl();
 
   const { fetchCompletion } = useCourseCompletion();
+
+  // Rescan em background (ex.: novo caminho extra adicionado na edição do curso):
+  // mostra progresso e recarrega as aulas automaticamente quando o scan termina.
+  const { activeScans, startScan } = useScanProgress();
+  const scanEntry = activeScans.find((s) => s.courseId === Number(courseId));
+  const isScanningThisCourse = !!scanEntry;
+  const wasScanningRef = useRef(false);
+
+  useEffect(() => {
+    if (wasScanningRef.current && !isScanningThisCourse) {
+      onFetch(true);
+      fetchCompletion(apiUrl, Number(courseId));
+    }
+    wasScanningRef.current = isScanningThisCourse;
+  }, [isScanningThisCourse]);
+
+  // Durante o scan o backend commita as aulas em lote — recarregar
+  // periodicamente para elas irem aparecendo na sidebar em tempo real.
+  useEffect(() => {
+    if (!isScanningThisCourse) return;
+    const id = window.setInterval(() => onFetch(true), 5000);
+    return () => window.clearInterval(id);
+  }, [isScanningThisCourse]);
+
+  // Auto-rescan: detecta arquivos novos no disco (ex.: download/cópia em
+  // andamento para a pasta do curso) e dispara o rescan sem clique manual.
+  useEffect(() => {
+    if (isScanningThisCourse) return;
+    const check = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/courses/${courseId}/check-updates`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.changed && !data.scanning) {
+          await fetch(`${apiUrl}/api/courses/${courseId}/rescan`, { method: "POST" });
+          startScan(Number(courseId));
+        }
+      } catch {
+        // backend offline — ignorar
+      }
+    };
+    const id = window.setInterval(check, 30000);
+    return () => window.clearInterval(id);
+  }, [apiUrl, courseId, isScanningThisCourse, startScan]);
 
   async function onFetch(minimal: boolean = false) {
     try {
@@ -398,6 +443,16 @@ export default function CoursePage() {
           );
         })}
       </nav>
+
+      {isScanningThisCourse && (
+        <div className="flex items-center gap-2 rounded-md bg-purple-500/10 px-3 py-1.5 text-xs text-purple-600 dark:text-purple-300">
+          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+          <span className="truncate">
+            Atualizando aulas… {scanEntry?.percentage ?? 0}%
+            {scanEntry?.current_module ? ` · ${scanEntry.current_module}` : ""}
+          </span>
+        </div>
+      )}
 
       {isDesktop ? (
         <PanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged} className="gap-2">

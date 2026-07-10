@@ -6,7 +6,7 @@ import threading
 from datetime import datetime
 
 from app import db, Course, Lesson, Note, ModuleLink
-from utils import list_and_register_lessons, scan_data_directory_and_register_courses, scan_progress, get_scan_lock
+from utils import list_and_register_lessons, scan_data_directory_and_register_courses, scan_progress, get_scan_lock, count_files_recursive
 
 bp = Blueprint('courses', __name__)
 
@@ -196,6 +196,23 @@ def rescan_course(course_id):
     thread.start()
 
     return jsonify({'message': 'Reescaneamento iniciado', 'courseId': course.id})
+
+
+@bp.route('/api/courses/<int:course_id>/check-updates', methods=['GET'])
+def check_course_updates(course_id):
+    """Compara arquivos suportados no disco vs aulas ativas no banco.
+    Usado pelo frontend para detectar arquivos novos (ex.: download em
+    andamento) e disparar rescan automático."""
+    course = Course.query.get_or_404(course_id)
+    paths = [p for p in course.get_all_paths() if p and os.path.isdir(p)]
+    disk_total = sum(count_files_recursive(p) for p in paths)
+    db_total = Lesson.query.filter_by(course_id=course_id, is_active=1).count()
+    return jsonify({
+        'disk_total': disk_total,
+        'db_total': db_total,
+        'changed': disk_total != db_total,
+        'scanning': get_scan_lock(course_id).locked(),
+    })
 
 
 @bp.route('/api/courses/<int:course_id>/scan-progress', methods=['GET'])

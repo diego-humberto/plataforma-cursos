@@ -21,6 +21,7 @@ import { useRef, useState } from "react";
 
 import { toast } from "sonner";
 import useApiUrl from "@/hooks/useApiUrl";
+import useScanProgress from "@/hooks/useScanProgress";
 import { Loader2, Plus, X } from "lucide-react";
 
 type Props = {
@@ -39,6 +40,7 @@ export default function EditCourse({ course, onUpdate }: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { apiUrl } = useApiUrl();
+  const { startScan } = useScanProgress();
 
   const handleEdit = async () => {
     if (!currentCourse.name.trim()) {
@@ -59,6 +61,12 @@ export default function EditCourse({ course, onUpdate }: Props) {
     if (filteredExtras.length > 0) {
       formData.append("extra_paths", JSON.stringify(filteredExtras));
     }
+
+    // O backend só reescaneia se o path principal ou os caminhos extras mudaram.
+    // Espelhamos essa condição para iniciar o polling de progresso só quando há scan.
+    const pathsChanged =
+      currentCourse.path !== course.path ||
+      JSON.stringify(course.extra_paths || []) !== JSON.stringify(filteredExtras);
 
     if (
       fileInputRefEdit.current &&
@@ -87,6 +95,12 @@ export default function EditCourse({ course, onUpdate }: Props) {
       });
 
       setIsOpen(false);
+
+      // Acompanhar o rescan em background disparado pelo backend e
+      // atualizar a UI automaticamente quando terminar.
+      if (pathsChanged) {
+        startScan(course.id);
+      }
     } catch (error) {
       toast.error("Erro ao atualizar o curso.", {
         duration: 2000,
