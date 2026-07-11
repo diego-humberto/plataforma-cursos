@@ -13,6 +13,7 @@ import { Toaster } from "sonner";
 import CoursesPage from "@/pages/courses";
 import Footer from "@/components/footer";
 import { ScanProgressProvider } from "@/hooks/useScanProgress";
+import { DailyReadingsProvider } from "@/hooks/useDailyReadings";
 import ErrorBoundary from "@/components/error-boundary";
 import { FocusMiniWidget } from "@/components/focus/focus-mini-widget";
 
@@ -57,9 +58,11 @@ export default function Router() {
   return (
     <BrowserRouter>
       <ScanProgressProvider>
+      <DailyReadingsProvider>
       <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
         <AppContent />
       </ThemeProvider>
+      </DailyReadingsProvider>
       </ScanProgressProvider>
     </BrowserRouter>
   );

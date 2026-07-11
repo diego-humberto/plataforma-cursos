@@ -5,8 +5,9 @@ import { memo, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import useApiUrl from "@/hooks/useApiUrl";
+import useDailyReadings from "@/hooks/useDailyReadings";
 import { cn } from "@/lib/utils";
-import { ExternalLink } from "lucide-react";
+import { BookmarkCheck, BookmarkPlus, ExternalLink } from "lucide-react";
 
 type Props = {
   lesson: Lesson;
@@ -31,11 +32,14 @@ const LessonListItem = memo(function LessonListItem({
   }, [lesson.isCompleted]);
 
   const { apiUrl } = useApiUrl();
+  const { isInReadings, add: addReading, remove: removeReading } = useDailyReadings();
 
   const filePath = lesson.pdf_url || lesson.video_url || "";
-  const isDocument = filePath.toLowerCase().endsWith(".pdf") ||
+  const isPdf = filePath.toLowerCase().endsWith(".pdf");
+  const isDocument = isPdf ||
     filePath.toLowerCase().endsWith(".html") ||
     filePath.toLowerCase().endsWith(".txt");
+  const inReadings = isPdf && isInReadings(filePath);
 
   const fileExt = (lesson.video_url || lesson.pdf_url).split(".").pop() ?? "";
 
@@ -53,6 +57,25 @@ const LessonListItem = memo(function LessonListItem({
       await api.post(`${apiUrl}/api/open-file`, { path: filePath });
     } catch {
       toast.error("Erro ao abrir arquivo.");
+    }
+  }
+
+  async function toggleDailyReading(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      if (inReadings) {
+        await removeReading(filePath);
+        toast.success("PDF removido das Leituras Diárias.");
+      } else {
+        await addReading(filePath, lesson.title);
+        toast.success("PDF adicionado às Leituras Diárias!");
+      }
+    } catch {
+      toast.error(
+        inReadings
+          ? "Erro ao remover das Leituras Diárias."
+          : "Erro ao adicionar às Leituras Diárias."
+      );
     }
   }
 
@@ -103,6 +126,20 @@ const LessonListItem = memo(function LessonListItem({
                 title="Abrir externamente"
               >
                 <ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </button>
+            )}
+
+            {isPdf && (
+              <button
+                onClick={toggleDailyReading}
+                className="p-0.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                title={inReadings ? "Remover das Leituras Diárias" : "Adicionar às Leituras Diárias"}
+              >
+                {inReadings ? (
+                  <BookmarkCheck className="h-3 w-3 text-orange-500" />
+                ) : (
+                  <BookmarkPlus className="h-3 w-3 text-muted-foreground" />
+                )}
               </button>
             )}
           </div>

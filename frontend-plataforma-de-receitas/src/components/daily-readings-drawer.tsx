@@ -11,43 +11,30 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import useApiUrl from "@/hooks/useApiUrl";
+import useDailyReadings from "@/hooks/useDailyReadings";
 import { toast } from "sonner";
-
-type DailyReading = { name: string; path: string };
 
 export function DailyReadingsDrawer({ customTrigger }: { customTrigger?: React.ReactNode } = {}) {
   const { apiUrl } = useApiUrl();
-  const [readings, setReadings] = useState<DailyReading[]>([]);
+  // Estado global compartilhado: adicionar/remover pela lista de aulas
+  // reflete aqui em tempo real (e vice-versa)
+  const { readings, add, remove, refresh } = useDailyReadings();
   const [newPath, setNewPath] = useState("");
   const [showInput, setShowInput] = useState(false);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    fetch(`${apiUrl}/api/daily-readings`)
-      .then((res) => res.json())
-      .then(setReadings)
-      .catch(() => {});
-  }, [apiUrl, open]);
+    if (open) refresh();
+  }, [open, refresh]);
 
   const handleAdd = async () => {
     if (!newPath.trim()) return;
     try {
-      const res = await fetch(`${apiUrl}/api/daily-readings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: newPath }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setReadings((prev) => [...prev, data]);
-        setNewPath("");
-        setShowInput(false);
-      } else {
-        toast.error(data.error);
-      }
-    } catch {
-      toast.error("Erro ao adicionar PDF.");
+      await add(newPath);
+      setNewPath("");
+      setShowInput(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Erro ao adicionar PDF.");
     }
   };
 
@@ -65,12 +52,7 @@ export function DailyReadingsDrawer({ customTrigger }: { customTrigger?: React.R
 
   const handleDelete = async (path: string) => {
     try {
-      await fetch(`${apiUrl}/api/daily-readings`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      setReadings((prev) => prev.filter((r) => r.path !== path));
+      await remove(path);
     } catch {
       toast.error("Erro ao remover PDF.");
     }
@@ -119,11 +101,9 @@ export function DailyReadingsDrawer({ customTrigger }: { customTrigger?: React.R
             >
               <FileText className="h-4 w-4 text-orange-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium break-words">
+                {/* Caminho absoluto fica só no tooltip — exibir apenas o nome amigável */}
+                <p className="text-sm font-medium break-words" title={reading.path}>
                   {reading.name}
-                </p>
-                <p className="text-[11px] text-muted-foreground truncate" title={reading.path}>
-                  {reading.path}
                 </p>
               </div>
               <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
