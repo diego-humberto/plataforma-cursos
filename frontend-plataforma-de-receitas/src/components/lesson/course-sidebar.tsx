@@ -20,7 +20,7 @@ interface CourseSidebarProps {
   lessonSearch: string;
   onLessonSearchChange: (value: string) => void;
   filteredModules: NestedModules;
-  onUpdate: () => void;
+  onToggleLesson: (lessonId: number, isCompleted: boolean) => void;
   onBatchToggle: (lessonIds: number[], isCompleted: boolean) => void;
   moduleLinks: ModuleLinks;
   onModuleLinksChange: (links: ModuleLinks) => void;
@@ -44,7 +44,7 @@ export function CourseSidebar({
   lessonSearch,
   onLessonSearchChange,
   filteredModules,
-  onUpdate,
+  onToggleLesson,
   onBatchToggle,
   moduleLinks,
   onModuleLinksChange,
@@ -122,7 +122,7 @@ export function CourseSidebar({
           {!lessonSearch && <LastWatchedCard courseId={courseId} />}
           <ModuleList
             modules={filteredModules}
-            onUpdate={onUpdate}
+            onToggleLesson={onToggleLesson}
             onBatchToggle={onBatchToggle}
             courseId={courseId}
             moduleLinks={moduleLinks}

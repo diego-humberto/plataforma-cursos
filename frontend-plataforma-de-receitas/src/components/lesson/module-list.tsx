@@ -31,7 +31,7 @@ import { createModuleLink, updateModuleLink, deleteModuleLink, getDistinctLabels
 
 type Props = {
   modules: NestedModules;
-  onUpdate: () => void;
+  onToggleLesson: (lessonId: number, isCompleted: boolean) => void;
   onBatchToggle?: (lessonIds: number[], isCompleted: boolean) => void;
   courseId: string;
   moduleLinks?: ModuleLinks;
@@ -139,7 +139,7 @@ function findSubFolderPathToLesson(node: GroupedNode, lessonId: number, keyPrefi
 
 // --- Component ---
 
-export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId, moduleLinks = {}, onModuleLinksChange, apiUrl }: Props) {
+export default function ModuleList({ modules, onToggleLesson, onBatchToggle, courseId, moduleLinks = {}, onModuleLinksChange, apiUrl }: Props) {
   const { selectLesson, selectedLesson } = useSelectedLesson();
   const activeLessonRef = useRef<HTMLDivElement>(null);
 
@@ -338,14 +338,6 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
     tryScroll(0);
   }, [selectedLesson?.id, sortedSections, sectionGroupedNodes]);
 
-  const handleCompleteLesson = useCallback(() => {
-    try {
-      onUpdate();
-    } catch {
-      toast.error("erro ao atualizar progresso");
-    }
-  }, [onUpdate]);
-
   const toggleAllLessons = useCallback((lessons: Lesson[], markCompleted: boolean) => {
     if (onBatchToggle) {
       onBatchToggle(lessons.map((l) => l.id), markCompleted);
@@ -380,7 +372,7 @@ export default function ModuleList({ modules, onUpdate, onBatchToggle, courseId,
             selectLesson(lesson);
           }}
           selectedLessonId={selectedLesson?.id}
-          onComplete={handleCompleteLesson}
+          onToggleCompleted={onToggleLesson}
         />
       </div>
     );

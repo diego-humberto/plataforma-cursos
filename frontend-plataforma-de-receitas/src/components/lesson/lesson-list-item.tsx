@@ -13,7 +13,7 @@ type Props = {
   selectedLessonId: number | undefined;
   index: number;
   onSelect: () => void;
-  onComplete: () => void;
+  onToggleCompleted: (lessonId: number, isCompleted: boolean) => void;
 };
 
 const LessonListItem = memo(function LessonListItem({
@@ -21,7 +21,7 @@ const LessonListItem = memo(function LessonListItem({
   selectedLessonId,
   index,
   onSelect,
-  onComplete,
+  onToggleCompleted,
 }: Props) {
   const [isCompleted, setIsCompleted] = useState(Boolean(lesson.isCompleted));
 
@@ -39,18 +39,12 @@ const LessonListItem = memo(function LessonListItem({
 
   const fileExt = (lesson.video_url || lesson.pdf_url).split(".").pop() ?? "";
 
-  async function toggleIsCompleted() {
-    setIsCompleted((v) => !v);
-
-    try {
-      await api.post(`${apiUrl}/api/update-lesson-progress`, {
-        lessonId: lesson.id,
-        isCompleted: !isCompleted,
-      });
-      onComplete();
-    } catch {
-      toast.error("Erro ao concluir aula");
-    }
+  function toggleIsCompleted() {
+    const next = !isCompleted;
+    setIsCompleted(next);
+    // A chamada à API e a atualização do estado global ficam no pai
+    // (update otimista, sem refetch da lista inteira)
+    onToggleCompleted(lesson.id, next);
   }
 
   async function openExternally(e: React.MouseEvent) {

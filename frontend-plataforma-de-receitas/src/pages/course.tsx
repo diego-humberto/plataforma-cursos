@@ -211,9 +211,20 @@ export default function CoursePage() {
     });
   }, [apiUrl, courseId]);
 
-  const handleSidebarUpdate = useCallback(() => {
-    onFetch(true);
-    fetchCompletion(apiUrl, Number(courseId));
+  // Toggle individual: update otimista no estado local (sem refetch das
+  // 2000+ aulas), API em background e refetch só se a chamada falhar
+  const handleToggleLesson = useCallback((lessonId: number, isCompleted: boolean) => {
+    setLessons((prev) =>
+      prev.map((l) =>
+        l.id === lessonId ? { ...l, isCompleted: isCompleted ? 1 : 0 } : l
+      )
+    );
+    api.post(`${apiUrl}/api/update-lesson-progress`, { lessonId, isCompleted })
+      .then(() => fetchCompletion(apiUrl, Number(courseId)))
+      .catch(() => {
+        toast.error("Erro ao atualizar aula.");
+        onFetch(true);
+      });
   }, [apiUrl, courseId]);
 
   const handleSeek = useCallback((time: number) => {
@@ -469,7 +480,11 @@ export default function CoursePage() {
                 onOpenNotesPip={openNotesPip}
                 isNotesPipOpen={isNotesPipOpen}
                 onLessonCompleted={() => {
-                  onFetch(true);
+                  // O player já marcou na API; só sincronizar o estado local
+                  if (!selectedLesson) return;
+                  setLessons((prev) =>
+                    prev.map((l) => (l.id === selectedLesson.id ? { ...l, isCompleted: 1 } : l))
+                  );
                   fetchCompletion(apiUrl, Number(courseId));
                 }}
               />
@@ -490,7 +505,7 @@ export default function CoursePage() {
               lessonSearch={lessonSearch}
               onLessonSearchChange={setLessonSearch}
               filteredModules={filteredModules}
-              onUpdate={handleSidebarUpdate}
+              onToggleLesson={handleToggleLesson}
               onBatchToggle={handleBatchToggle}
               moduleLinks={moduleLinks}
               onModuleLinksChange={setModuleLinks}
@@ -516,7 +531,11 @@ export default function CoursePage() {
               allLessons={lessons}
               onSelectLesson={selectLesson}
               onLessonCompleted={() => {
-                onFetch(true);
+                // O player já marcou na API; só sincronizar o estado local
+                if (!selectedLesson) return;
+                setLessons((prev) =>
+                  prev.map((l) => (l.id === selectedLesson.id ? { ...l, isCompleted: 1 } : l))
+                );
                 fetchCompletion(apiUrl, Number(courseId));
               }}
             />
@@ -532,7 +551,7 @@ export default function CoursePage() {
             lessonSearch={lessonSearch}
             onLessonSearchChange={setLessonSearch}
             filteredModules={filteredModules}
-            onUpdate={handleSidebarUpdate}
+            onToggleLesson={handleToggleLesson}
             onBatchToggle={handleBatchToggle}
             moduleLinks={moduleLinks}
             onModuleLinksChange={setModuleLinks}
