@@ -227,31 +227,35 @@ h2 {
   color: hsl(var(--primary-foreground));
 }
 
-/* Resize handle entre player e sidebar */
+/* Divisor entre player e sidebar: painéis colados, separados por uma
+   linha de 1px. A área de arraste real (hitbox) tem 15px, invisível,
+   estendida por cima das bordas dos painéis via ::before. */
 .resize-handle {
-  width: 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.resize-handle:hover,
-.resize-handle:active {
+  position: relative;
+  width: 1px;
   background-color: hsl(var(--border));
+  cursor: col-resize;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.resize-handle::after {
+/* Hitbox invisível mais larga para facilitar a pegada com o mouse */
+.resize-handle::before {
   content: "";
-  width: 3px;
-  height: 32px;
-  border-radius: 2px;
-  background-color: hsl(var(--muted-foreground) / 0.3);
-  transition: background-color 0.2s;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -7px;
+  right: -7px;
 }
 
-.resize-handle:hover::after,
-.resize-handle:active::after {
-  background-color: hsl(var(--muted-foreground) / 0.7);
+/* Hover/arraste/foco: linha ganha a cor da marca */
+.resize-handle:hover,
+.resize-handle:active,
+.resize-handle:focus-visible {
+  background-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary));
+  outline: none;
 }
+
+/* Sem indicador extra: o cursor ↔ nativo (col-resize) já mostra a direção;
+   um badge fixo no centro parecia um segundo puxador. */

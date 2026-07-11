@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ChevronRight, Home, Loader2 } from "lucide-react";
 import useScanProgress from "@/hooks/useScanProgress";
-import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, useDefaultLayout } from "react-resizable-panels";
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, useDefaultLayout, useGroupRef } from "react-resizable-panels";
 import LessonSkeleton from "@/components/lesson/lesson-skeleton";
 import { toast } from "sonner";
 import type { MediaPlayerInstance } from "@vidstack/react";
@@ -48,6 +48,14 @@ export default function CoursePage() {
     id: "course-layout",
     storage: localStorage,
   });
+
+  // Duplo clique no divisor restaura a proporção padrão 70/30
+  const panelGroupRef = useGroupRef();
+  const resetPanelLayout = useCallback(() => {
+    const applied = panelGroupRef.current?.setLayout({ player: 70, sidebar: 30 });
+    // Persistir explicitamente (setLayout programático não notifica o Group)
+    if (applied) onLayoutChanged(applied);
+  }, [panelGroupRef, onLayoutChanged]);
 
   const { courseId } = useParams<{ courseId: string }>();
   const { selectedLesson, clearSelection, selectLesson } = useSelectedLesson();
@@ -466,8 +474,8 @@ export default function CoursePage() {
       )}
 
       {isDesktop ? (
-        <PanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged} className="gap-2">
-          <Panel id="player" defaultSize="70%" minSize="50%">
+        <PanelGroup orientation="horizontal" groupRef={panelGroupRef} defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
+          <Panel id="player" defaultSize="70%" minSize="55%">
             <div ref={contentRef} className="w-full max-h-max bg-card rounded-md h-full">
               <LessonViewer
                 lesson={selectedLesson}
@@ -491,9 +499,13 @@ export default function CoursePage() {
             </div>
           </Panel>
 
-          <PanelResizeHandle className="resize-handle" />
+          <PanelResizeHandle
+            className="resize-handle"
+            onDoubleClick={resetPanelLayout}
+            title="Arraste para redimensionar · Duplo clique restaura 70/30"
+          />
 
-          <Panel id="sidebar" defaultSize="30%" minSize="15%" maxSize="45%" collapsible collapsedSize="0%">
+          <Panel id="sidebar" defaultSize="30%" minSize="340px" maxSize="45%">
             <CourseSidebar
               sidebarRef={sidebarRef}
               courseTitle={selectedLesson?.course_title}
