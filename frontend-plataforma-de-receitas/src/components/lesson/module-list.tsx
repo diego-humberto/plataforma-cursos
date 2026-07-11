@@ -119,6 +119,36 @@ function toGroupedNodes(entries: [string, Lesson[]][]): GroupedNode[] {
   return tree.map(nodeToGrouped);
 }
 
+// --- Renderização progressiva ---
+// Módulos grandes (400+ aulas) travavam ao expandir porque todos os itens
+// eram montados de uma vez. Renderiza os primeiros imediatamente (suficiente
+// para encher a tela) e o resto em frames seguintes.
+const PROGRESSIVE_INITIAL = 40;
+const PROGRESSIVE_CHUNK = 80;
+
+function ProgressiveList({
+  items,
+  renderItem,
+}: {
+  items: Lesson[];
+  renderItem: (lesson: Lesson, index: number) => JSX.Element;
+}) {
+  const [count, setCount] = useState(() => Math.min(PROGRESSIVE_INITIAL, items.length));
+
+  useEffect(() => {
+    if (count >= items.length) {
+      if (count > items.length) setCount(items.length);
+      return;
+    }
+    const id = window.requestAnimationFrame(() =>
+      setCount((c) => Math.min(c + PROGRESSIVE_CHUNK, items.length))
+    );
+    return () => window.cancelAnimationFrame(id);
+  }, [count, items.length]);
+
+  return <>{items.slice(0, count).map((lesson, i) => renderItem(lesson, i))}</>;
+}
+
 function getSubfolderIcon(name: string) {
   const lower = name.toLowerCase();
   if (lower.includes("anexo")) return Paperclip;
@@ -364,7 +394,13 @@ export default function ModuleList({ modules, onToggleLesson, onBatchToggle, cou
   function renderLessonItem(lesson: Lesson, index: number) {
     const isActive = lesson.id === selectedLesson?.id;
     return (
-      <div key={lesson.id} ref={isActive ? activeLessonRef : undefined} data-active-lesson={isActive || undefined}>
+      <div
+        key={lesson.id}
+        ref={isActive ? activeLessonRef : undefined}
+        data-active-lesson={isActive || undefined}
+        // Pula layout/paint dos itens fora da viewport (listas grandes)
+        className="[content-visibility:auto] [contain-intrinsic-size:auto_4.25rem]"
+      >
         <LessonListItem
           lesson={lesson}
           index={index}
@@ -379,15 +415,15 @@ export default function ModuleList({ modules, onToggleLesson, onBatchToggle, cou
   }
 
   function renderGroupedContent(node: GroupedNode, nodeKey: string, startCounter: number = 0) {
-    let counter = startCounter;
+    let counter = startCounter + node.directLessons.length;
     let foundFirstIncomplete = false;
 
     return (
       <div className="ml-2 border-l-2 border-neutral-200 dark:border-neutral-700 pl-1">
-        {node.directLessons.map((lesson) => {
-          counter++;
-          return renderLessonItem(lesson, counter);
-        })}
+        <ProgressiveList
+          items={node.directLessons}
+          renderItem={(lesson, i) => renderLessonItem(lesson, startCounter + i + 1)}
+        />
         {node.subFolders.map((sub) => {
           const SubIcon = getSubfolderIcon(sub.title);
           const subAllCompleted = isAllCompleted(sub.allLessons);
@@ -553,9 +589,10 @@ export default function ModuleList({ modules, onToggleLesson, onBatchToggle, cou
                 <AccordionContent>
                   {isSingleFlat ? (
                     <div className="ml-3 border-l-2 border-neutral-200 dark:border-neutral-700 pl-1">
-                      {groupedNodes[0].allLessons.map((lesson, i) =>
-                        renderLessonItem(lesson, i + 1)
-                      )}
+                      <ProgressiveList
+                        items={groupedNodes[0].allLessons}
+                        renderItem={(lesson, i) => renderLessonItem(lesson, i + 1)}
+                      />
                     </div>
                   ) : (
                     <Accordion
