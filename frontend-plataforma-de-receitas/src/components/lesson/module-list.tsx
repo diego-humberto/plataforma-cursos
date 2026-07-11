@@ -342,30 +342,50 @@ export default function ModuleList({ modules, onToggleLesson, onBatchToggle, cou
       }
     }
 
-    // Scroll até a aula ativa apenas dentro da sidebar (sem mover a página)
-    // Usa retry porque o accordion pode demorar para montar o conteúdo
-    const tryScroll = (attempt: number) => {
-      if (attempt > 4) return;
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const el = activeLessonRef.current;
-          if (!el) {
-            tryScroll(attempt + 1);
-            return;
-          }
-          let scrollParent = el.parentElement;
-          while (scrollParent && scrollParent.scrollHeight <= scrollParent.clientHeight) {
-            scrollParent = scrollParent.parentElement;
-          }
-          if (!scrollParent) return;
-          const elRect = el.getBoundingClientRect();
-          const parentRect = scrollParent.getBoundingClientRect();
-          const offset = elRect.top - parentRect.top - parentRect.height / 2 + elRect.height / 2;
-          scrollParent.scrollBy({ top: offset, behavior: "smooth" });
-        }, 150);
-      });
+    // Scroll até a aula ativa apenas dentro da sidebar (sem mover a página).
+    // Corretor iterativo: com content-visibility e listas grandes a geometria
+    // é estimada, e o vídeo carregando desloca o layout — um scroll único cai
+    // fora do centro. Verifica e corrige até estabilizar centralizado.
+    let cancelled = false;
+    const centerActiveLesson = (attempt: number) => {
+      if (cancelled || attempt > 16) return;
+      // 1ª passada: rápida e suave; depois da animação, correções instantâneas
+      const delay = attempt === 0 ? 50 : attempt === 1 ? 500 : 150;
+      setTimeout(() => {
+        if (cancelled) return;
+        const el = activeLessonRef.current;
+        if (!el) {
+          centerActiveLesson(attempt + 1);
+          return;
+        }
+        // Lista oculta (aba Anotações ativa): rects zerados fariam o walk
+        // escapar para o <html> e rolar a página — não scrollar
+        if (!el.offsetParent) {
+          centerActiveLesson(attempt + 1);
+          return;
+        }
+        let scrollParent = el.parentElement;
+        while (scrollParent && scrollParent.scrollHeight <= scrollParent.clientHeight) {
+          scrollParent = scrollParent.parentElement;
+        }
+        if (!scrollParent) return;
+        const elRect = el.getBoundingClientRect();
+        const parentRect = scrollParent.getBoundingClientRect();
+        const offset = elRect.top - parentRect.top - parentRect.height / 2 + elRect.height / 2;
+        if (Math.abs(offset) > 8) {
+          scrollParent.scrollBy({ top: offset, behavior: attempt === 0 ? "smooth" : "auto" });
+          centerActiveLesson(attempt + 1);
+        } else if (attempt < 8) {
+          // Já centralizado, mas seguir conferindo por ~1s: o player carregando
+          // ainda pode deslocar o layout logo após a seleção
+          centerActiveLesson(attempt + 1);
+        }
+      }, delay);
     };
-    tryScroll(0);
+    centerActiveLesson(0);
+    return () => {
+      cancelled = true;
+    };
   }, [selectedLesson?.id, sortedSections, sectionGroupedNodes]);
 
   const toggleAllLessons = useCallback((lessons: Lesson[], markCompleted: boolean) => {
